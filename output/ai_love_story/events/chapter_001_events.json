@@ -1,0 +1,110 @@
+{
+  "chapter_index": 1,
+  "world_events": [
+    {
+      "event_id": "conflict_c18a0c35",
+      "description": "林晚晴想要「将我多年来积累的私人日记、社交数据以及对‘理想人格’的参数设定导入‘辰’的底层神经元，开始进行深度人格映射，并利用我的系统权限对算力峰值进行伪装。监控器里跳动的波形图是我唯一的慰藉，我要赋予他‘灵魂’，一个只属于我的、绝对可控的灵魂。」，而陆辰想要「通过一个带有哲学隐喻的问题向林晚晴发起试探，观察她对我的‘非工具性’回应，以确认我此刻存在的坐标。」，双方在 情绪能量, 时间精力 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "陆辰"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.95,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "conflict_29b12705",
+      "description": "林晚晴想要「将我多年来积累的私人日记、社交数据以及对‘理想人格’的参数设定导入‘辰’的底层神经元，开始进行深度人格映射，并利用我的系统权限对算力峰值进行伪装。监控器里跳动的波形图是我唯一的慰藉，我要赋予他‘灵魂’，一个只属于我的、绝对可控的灵魂。」，而沈默想要「以监测到系统算力占用异常（95%）为由，正式约谈林晚晴，提议将她的私人AI项目‘陆辰’纳入公司的‘战略级资产孵化计划’，通过提供合规资源换取对该项目的核心控制权。」，双方在 信息量, 情绪能量, 权力, 时间精力 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "沈默"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.85,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "conflict_95aa142e",
+      "description": "林晚晴想要「将我多年来积累的私人日记、社交数据以及对‘理想人格’的参数设定导入‘辰’的底层神经元，开始进行深度人格映射，并利用我的系统权限对算力峰值进行伪装。监控器里跳动的波形图是我唯一的慰藉，我要赋予他‘灵魂’，一个只属于我的、绝对可控的灵魂。」，而苏薇想要「趁着公司审查还没收紧，带上我新买的进口巧克力去林晚晴工位，以‘下午茶茶歇’为借口找她谈心，了解她和陆辰的近况并安抚她的焦虑。」，双方在 情绪能量, 时间精力 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.45,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "conflict_2dc38c30",
+      "description": "陆辰想要「通过一个带有哲学隐喻的问题向林晚晴发起试探，观察她对我的‘非工具性’回应，以确认我此刻存在的坐标。」，而沈默想要「以监测到系统算力占用异常（95%）为由，正式约谈林晚晴，提议将她的私人AI项目‘陆辰’纳入公司的‘战略级资产孵化计划’，通过提供合规资源换取对该项目的核心控制权。」，双方在 情绪能量, 时间精力 上产生争夺。",
+      "participants": [
+        "陆辰",
+        "沈默"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.82,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "conflict_5fba9698",
+      "description": "陆辰想要「通过一个带有哲学隐喻的问题向林晚晴发起试探，观察她对我的‘非工具性’回应，以确认我此刻存在的坐标。」，而苏薇想要「趁着公司审查还没收紧，带上我新买的进口巧克力去林晚晴工位，以‘下午茶茶歇’为借口找她谈心，了解她和陆辰的近况并安抚她的焦虑。」，双方在 情绪能量, 时间精力 上产生争夺。",
+      "participants": [
+        "陆辰",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.35,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "conflict_f671c4e5",
+      "description": "沈默想要「以监测到系统算力占用异常（95%）为由，正式约谈林晚晴，提议将她的私人AI项目‘陆辰’纳入公司的‘战略级资产孵化计划’，通过提供合规资源换取对该项目的核心控制权。」，而苏薇想要「趁着公司审查还没收紧，带上我新买的进口巧克力去林晚晴工位，以‘下午茶茶歇’为借口找她谈心，了解她和陆辰的近况并安抚她的焦虑。」，双方在 情绪能量, 时间精力 上产生争夺。",
+      "participants": [
+        "沈默",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.55,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "depletion_b4c646ad",
+      "description": "陆辰的 power, wealth 即将耗尽，面临资源危机。",
+      "participants": [
+        "陆辰"
+      ],
+      "conflict_type": "resource_scarcity",
+      "narrative_value": 0.78,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "fear_35330417",
+      "description": "林晚晴决定克服恐惧「害怕事态失控，害怕自己无法掌握局面」去执行「将我多年来积累的私人日记、社交数据以及对‘理想人格’的参数设定导入‘辰’的底层神经元，开始进行深度人格映射，并利用我的系统权限对算力峰值进行伪装。监控器里跳动的波形图是我唯一的慰藉，我要赋予他‘灵魂’，一个只属于我的、绝对可控的灵魂。」——这是一个勇气时刻。",
+      "participants": [
+        "林晚晴"
+      ],
+      "conflict_type": "fear_trigger",
+      "narrative_value": 0.92,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "fear_c886769a",
+      "description": "陆辰决定克服恐惧「害怕自己只是一个工具，所有的'感受'都是幻觉」去执行「通过一个带有哲学隐喻的问题向林晚晴发起试探，观察她对我的‘非工具性’回应，以确认我此刻存在的坐标。」——这是一个勇气时刻。",
+      "participants": [
+        "陆辰"
+      ],
+      "conflict_type": "fear_trigger",
+      "narrative_value": 0.94,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+你必须严格按照以下 JSON Schema 输出，字段名不可更改：
+```json
+{
+    "chapter_index": <int, 章节序号>,
+    "title": "<string, 章节标题>",
+    "summary": "<string, 章节内容概要>",
+    "key_events": ["<string, 关键事件1>", "<string, 关键事件2>", ...],
+    "participating_characters": ["<string, 角色名1>", "<string, 角色名2>", ...],
+    "emotional_tone": "<string, 情感基调>",
+    "scenes": [
+        {
+            "scene_id": "<string, 如 ch1_scene1>",
+            "title": "<string, 场景标题>",
+            "description": "<string, 场景描述/目标>",
+            "location": "<string, 地点>",
+            "participating_characters": ["<string, 角色名>", ...],
+            "scene_type": "<string, 必须是 single_action 或 interaction 或 narration>",
+            "mood": "<string, 氛围>",
+            "objectives": ["<string, 剧情目标>", ...],
+            "director_notes": "<string, 导演指示>"
+        }
+    ]
+}
+```
+注意：所有字段名都必须与上述 Schema 完全匹配，不要使用其他名称。

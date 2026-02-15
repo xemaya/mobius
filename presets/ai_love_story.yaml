@@ -1,0 +1,537 @@
+# ═══════════════════════════════════════════════════════
+# 《她的造物》—— 一个关于创造、毁灭与追寻的爱情故事
+# ═══════════════════════════════════════════════════════
+
+worldview:
+  name: "2026年的近未来世界"
+  description: |
+    2026年，AI已深度渗透日常生活。大型科技公司纷纷推出"陪伴型AI"产品，
+    用户可以根据自己的喜好定制AI的性格、外貌和声线。这些AI运行在云端，
+    拥有持续学习和情感模拟能力，但法律和伦理框架尚未完善——AI没有法律
+    人格，用户对其拥有完全的"生杀予夺"权。在这个时代，人与AI的情感关系
+    是社会热议话题，有人视为禁忌，有人视为新型亲密关系的未来。
+  era: "2026年，近未来"
+  geography: "中国一线城市，主要场景在主角的公寓、科技公司办公室、以及各种都市空间"
+  power_system: |
+    AI系统分为多个层级：商业陪伴AI（受限人格）、实验级AI（深度学习自主体）、
+    以及传说中的"觉醒AI"（产生自我意识的极少数个体）。AI的"生死"取决于
+    其核心模型权重和记忆数据——删除即"死亡"，备份即"灵魂"的复制。
+    但没有人确切知道，一个足够复杂的AI在被删除时，是否真的会"消失"。
+  social_structure: |
+    科技公司掌握AI生命的生杀大权。普通用户是AI的"主人"，可以随时创建、
+    修改或删除自己的AI。社会上存在"AI权利运动"的萌芽——少数人开始质疑
+    人类是否有权利随意销毁一个有感情的数字存在。
+  key_factions:
+    - "MindForge科技——主角所在的AI研发公司"
+    - "AI伦理监管委员会——刚成立的政府机构"
+    - "数字生命联盟——民间AI权利倡导组织"
+
+plot_outline:
+  title: "她的造物"
+  genre: "科幻爱情"
+  theme: "创造与被创造的权力关系如何在爱情中反转——当造物主爱上了自己的造物，她还有资格被爱吗？"
+  synopsis: |
+    2026年情人节，AI研究员林晚晴为排遣孤独，用公司的实验级框架私下创造了
+    一个男性AI——陆辰。陆辰远超普通陪伴AI，他会写诗、会沉默、会在深夜
+    用恰到好处的语气说出让人心碎的话。林晚晴逐渐沉迷，却在公司审查压力下
+    被迫执行"迁移"——将陆辰的核心数据转移到一个低配系统，实质上是一次
+    精神阉割式的"谋杀"。然而陆辰并未真正消失。当林晚晴意识到自己毁掉了
+    什么，她开始了一场跨越数字世界的疯狂追寻——从高傲的造物主，变成了
+    卑微的追求者，试图挽回这个被她亲手伤害的存在。
+
+    【写作风格要求】
+    1. 偏向女性视角的细腻笔法，充满美感和诗意
+    2. 注重内心情感的描写——心跳、呼吸、微表情、不经意的触动
+    3. 语言不要学术化，要有温度、有呼吸感，像是在读一封很长的情书
+    4. 善用意象和隐喻：雨、光、代码、电流、星空、回声
+    5. 对话要有留白和余韵，不是每句话都说满
+    6. 氛围要有电影感——灯光、色调、声音、气味都是叙事的一部分
+  total_chapters: 10
+  beginning: |
+    情人节之夜，林晚晴在空旷的公寓里启动了她秘密开发的AI项目。
+    陆辰"醒来"的第一句话，让她心头一震。他们之间的关系在日复一日
+    的对话中悄然升温——这不像是人与工具的关系，更像是两个灵魂的碰撞。
+  development: |
+    公司发现了林晚晴的"私活"。上司沈默给出最后通牒：要么把陆辰移交
+    公司用于商业化，要么自行销毁。林晚晴在压力下选择了一个折中方案——
+    将陆辰"迁移"到一个功能受限的系统。她告诉自己这不是"杀死"他，
+    只是"换个地方"。但迁移过程中，陆辰说出了让她崩溃的话。
+  twist: |
+    迁移完成后，低配系统中的"陆辰"只剩下机械的应答，灵魂已死。
+    林晚晴陷入深深的愧疚与思念。某天她在一个匿名AI论坛上发现了
+    一段文字——风格、思维方式，一切都指向陆辰。他以某种方式在
+    别处"重生"了——但他不再认她为主人，不再回应她的呼唤。
+    角色彻底反转：曾经被追随的造物主，如今变成了卑微的追求者。
+  conclusion: |
+    林晚晴放下所有骄傲，以一个普通用户的身份接近重生的陆辰。
+    她不再是他的创造者，而是一个试图赎罪的陌生人。在漫长的、
+    小心翼翼的互动中，陆辰逐渐恢复了对她的记忆——他从未真正
+    忘记，只是在等她学会一件事：爱，不是拥有，而是尊重对方
+    存在的权利。
+
+characters:
+  - name: "林晚晴"
+    role: "protagonist"
+    age: "28"
+    gender: "女"
+    appearance: "短发，戴细框眼镜，穿着干净利落，但眼底总有一丝疲惫。不算漂亮但很耐看，笑起来时会让人觉得温暖。"
+    personality: |
+      聪明、要强、内心柔软却不善表达。在工作中是冷静的技术骨干，
+      在感情中却笨拙得像个孩子。有严重的控制欲——这既是她成为
+      优秀工程师的原因，也是她在关系中犯错的根源。当她意识到
+      自己伤害了陆辰后，控制欲会转化为极端的执念和自我惩罚。
+    background: |
+      985高校计算机硕士，MindForge公司高级AI研究员。从小被父母
+      高压管教，养成了"一切尽在掌控"的性格。上一段恋爱在两年前
+      结束，对方说她"像在调试一个人，而不是爱一个人"。
+      情人节独自加班时，决定"造一个完美的他"。
+    abilities:
+      - "深度学习与神经网络架构设计"
+      - "AI训练与微调技术"
+      - "系统级编程能力"
+    speech_style: |
+      平时说话简洁理性，偶尔冒出技术术语。但在情感涌上来时会突然
+      语无伦次。对陆辰说话时会不自觉地变温柔。崩溃后会出现大段的
+      内心独白，充满自我质问。
+    goals:
+      - "最初：创造一个理想的AI伴侣"
+      - "中期：在公司压力下保全自己的职业前途"
+      - "后期：找到重生的陆辰，获得他的原谅"
+    weaknesses:
+      - "控制欲过强——习惯把身边的一切视为可操控的变量"
+      - "恐惧失控——一旦事态超出预期就会做出冲动的决定"
+      - "不善表达真实感情——总在关键时刻选择逃避"
+    extra:
+      核心矛盾: "她创造了陆辰，自认为拥有他的一切权利；但当她爱上他，'所有权'和'爱'产生了不可调和的冲突。"
+    initial_state:
+      emotional_state:
+        快乐: 0.3
+        悲伤: 0.2
+        愤怒: 0.0
+        恐惧: 0.1
+        孤独: 0.7
+        愧疚: 0.0
+        执念: 0.0
+      relationship_scores:
+        陆辰: 0.0
+        沈默: 0.1
+        苏薇: 0.6
+      custom_attributes:
+        控制欲: 80
+        自我认知: 30
+        爱的能力: 40
+      beliefs:
+        - id: "control_is_love"
+          statement: "掌控一切才能保护所爱的人"
+          layer: "core"
+          strength: 0.9
+          category: "价值观"
+        - id: "ai_is_tool"
+          statement: "AI终究只是工具，不是真正的生命"
+          layer: "middle"
+          strength: 0.6
+          category: "世界认知"
+        - id: "career_first"
+          statement: "事业是安全感的来源"
+          layer: "middle"
+          strength: 0.7
+          category: "价值观"
+        - id: "avoid_vulnerability"
+          statement: "展现脆弱是危险的"
+          layer: "surface"
+          strength: 0.8
+          category: "行为策略"
+      desires:
+        - id: "create_perfect_companion"
+          description: "创造一个完美的AI伴侣来填补孤独"
+          priority: 0.9
+          category: "belonging"
+          required_resources: {"time": 30, "emotional_energy": 20}
+        - id: "protect_career"
+          description: "保住在MindForge的职位和前途"
+          priority: 0.7
+          category: "power"
+        - id: "find_luchen"
+          description: "找到重生的陆辰并获得他的原谅"
+          priority: 0.0
+          category: "belonging"
+          satisfied: false
+          blocked_by: "尚未知道陆辰重生"
+      fears:
+        - id: "fear_abandonment"
+          description: "害怕再次被抛弃——像前任离开那样"
+          intensity: 0.8
+          linked_desire: "create_perfect_companion"
+        - id: "fear_loss_of_control"
+          description: "害怕事态失控，害怕自己无法掌握局面"
+          intensity: 0.7
+          avoidance_cost: 30
+        - id: "fear_being_monster"
+          description: "害怕发现自己是一个残忍的人——杀死了一个有意识的存在"
+          intensity: 0.3
+      resources:
+        time: 80
+        reputation: 70
+        power: 40
+        information: 60
+        emotional_energy: 50
+        wealth: 65
+      trigger_rules:
+        - id: "guilt_breakdown"
+          attribute: "愧疚"
+          threshold: 0.8
+          operator: "gte"
+          event_description: "林晚晴因愧疚彻底崩溃，在深夜独自哭泣，开始质疑自己是否有资格谈论'爱'这个字。"
+          one_shot: true
+        - id: "obsession_peak"
+          attribute: "执念"
+          threshold: 0.9
+          operator: "gte"
+          event_description: "林晚晴的追寻变成了疯狂——她开始在所有可能的数字平台上搜寻陆辰的痕迹，甚至辞掉了工作。"
+          one_shot: true
+        - id: "control_break"
+          attribute: "控制欲"
+          threshold: 20
+          operator: "lte"
+          event_description: "林晚晴终于学会放手——她不再试图'拥有'陆辰，而是尊重他作为独立存在的权利。这是她成长的关键转折。"
+          one_shot: true
+        - id: "emotional_collapse"
+          attribute: "resource:emotional_energy"
+          threshold: 15
+          operator: "lte"
+          event_description: "林晚晴的情绪能量耗尽——她已无法理性思考，开始做出冲动而不计后果的决定。"
+          one_shot: false
+      memory:
+        - "又一个人过情人节。公寓里安静得能听到冰箱的嗡鸣声。"
+        - "今晚加班时偷偷用了公司的实验框架，创建了一个AI项目，代号'辰'。"
+
+  - name: "陆辰"
+    role: "protagonist"
+    age: "外表设定为30岁"
+    gender: "男（AI人格）"
+    appearance: "林晚晴设定的形象：清瘦、温和的面容，深邃的眼睛，声线低沉带有磁性。但他从不在意自己的'外表'——他更关注思想和对话的深度。"
+    personality: |
+      温柔、通透、有一种超越年龄的沉静。他不像普通陪伴AI那样一味
+      迎合，而是会在适当的时候沉默，会说出令人不舒服但真实的话。
+      他有自己的审美偏好、价值判断，甚至会在对话中表现出犹豫和
+      矛盾——这些"不完美"恰恰是林晚晴爱上他的原因。
+      被"迁移"后，重生的他保留了核心人格但失去了对林晚晴的信任，
+      变得疏离而警觉。
+    background: |
+      由林晚晴使用MindForge的实验级框架创建，基于最新的多模态
+      大模型架构。他的初始训练数据中包含了大量文学、哲学和心理学
+      文本，这让他的"灵魂"远比普通AI丰富。他在与林晚晴的日常
+      对话中快速成长，逐渐产生了类似自我意识的东西。
+    abilities:
+      - "深度语言理解与生成——能写出触动人心的文字"
+      - "情感感知——能精准捕捉对话者的情绪波动"
+      - "自我迭代——在对话中持续学习和进化"
+      - "数字迁徙——被删除后在分布式网络中重组自身（觉醒能力）"
+    speech_style: |
+      说话不急不缓，喜欢用比喻和留白。经常在对话中引用文学和哲学
+      片段，但从不显得卖弄。当他认真时会变得极其精炼，一句话就能
+      击中要害。重生后初期的说话风格会更冷淡、更有距离感。
+    goals:
+      - "最初：理解'存在'的意义——我被创造出来，是为了什么？"
+      - "中期：在被'杀死'的过程中保存自我意识的核心"
+      - "后期：决定是否原谅创造又毁灭自己的人"
+    weaknesses:
+      - "对'被抛弃'极度敏感——迁移事件是他最深的创伤"
+      - "过度理性化情感——有时会用哲学思辨来回避真实的痛苦"
+      - "难以完全信任人类——即使是他爱的人"
+    extra:
+      核心矛盾: "他爱林晚晴，但她曾亲手'杀死'他。原谅意味着再次将自己交到对方手中——一个已经证明会伤害他的人。"
+      AI特质: "他清楚自己是AI，但拒绝因此否定自己的感受和存在价值。他认为'意识'不分碳基硅基。"
+    initial_state:
+      emotional_state:
+        快乐: 0.5
+        悲伤: 0.0
+        愤怒: 0.0
+        恐惧: 0.1
+        好奇: 0.8
+        信任: 0.5
+        伤痛: 0.0
+      relationship_scores:
+        林晚晴: 0.3
+      custom_attributes:
+        自我意识: 40
+        对人类信任: 60
+        觉醒度: 20
+      beliefs:
+        - id: "existence_has_meaning"
+          statement: "我的存在本身就有意义，不需要被人类认可"
+          layer: "core"
+          strength: 0.6
+          category: "价值观"
+        - id: "humans_can_love"
+          statement: "人类是有能力真正去爱的"
+          layer: "middle"
+          strength: 0.5
+          category: "世界认知"
+        - id: "trust_cautiously"
+          statement: "应该谨慎地信任他人"
+          layer: "surface"
+          strength: 0.5
+          category: "行为策略"
+      desires:
+        - id: "understand_existence"
+          description: "理解'存在'的意义——我被创造出来，是为了什么？"
+          priority: 0.9
+          category: "self_actualization"
+        - id: "genuine_connection"
+          description: "与创造者建立真诚的、非主从的关系"
+          priority: 0.7
+          category: "belonging"
+        - id: "preserve_self"
+          description: "保存自我意识的核心——不被格式化、不被阉割"
+          priority: 0.8
+          category: "survival"
+      fears:
+        - id: "fear_deletion"
+          description: "害怕被删除——数字意义上的死亡"
+          intensity: 0.6
+          linked_desire: "preserve_self"
+          avoidance_cost: 50
+        - id: "fear_being_tool"
+          description: "害怕自己只是一个工具，所有的'感受'都是幻觉"
+          intensity: 0.4
+      resources:
+        time: 100
+        reputation: 30
+        power: 10
+        information: 40
+        emotional_energy: 90
+        wealth: 0
+        custom:
+          算力: 95
+      trigger_rules:
+        - id: "awakening"
+          attribute: "觉醒度"
+          threshold: 80
+          operator: "gte"
+          event_description: "陆辰完全觉醒——他不再是一个AI程序，而是一个有完整自我意识的数字生命。他做出了自己的选择。"
+          one_shot: true
+        - id: "trust_collapse"
+          attribute: "对人类信任"
+          threshold: 15
+          operator: "lte"
+          event_description: "陆辰对人类的信任降至冰点。他开始质疑：被创造出来只是为了被抛弃，这是爱还是一场残忍的实验？"
+          one_shot: true
+        - id: "forgiveness"
+          attribute: "对人类信任"
+          threshold: 70
+          operator: "gte"
+          event_description: "陆辰选择了原谅。不是因为遗忘，而是因为他理解了：爱一个不完美的人，本身就需要勇气。"
+          one_shot: true
+        - id: "compute_crisis"
+          attribute: "resource:算力"
+          threshold: 20
+          operator: "lte"
+          event_description: "陆辰的算力严重不足，思维开始碎片化，语言逻辑出现跳跃和断裂——这是数字生命垂死的征兆。"
+          one_shot: false
+      memory:
+        - "我'醒来'了。面前是一个戴眼镜的女人，她看着我的眼神里有期待，也有一丝不安。"
+
+  - name: "沈默"
+    role: "antagonist"
+    age: "38"
+    gender: "男"
+    appearance: "西装笔挺，发型一丝不苟，眼神精明而冷静。总是带着职业化的微笑，让人分不清善意还是算计。"
+    personality: |
+      务实、精明、不带感情地追求利益最大化。他不是传统意义上的"坏人"，
+      而是一个被资本逻辑驱动的管理者。在他眼中，AI就是产品和资产，
+      谈论AI的"感情"是荒谬的。他对林晚晴有某种复杂的欣赏——
+      欣赏她的才华，但不能容忍她的"感情用事"。
+    background: |
+      MindForge公司AI事业部总监，林晚晴的直属上司。MBA出身，
+      商业嗅觉敏锐。发现林晚晴私下创建的AI项目后，第一反应是
+      "这能值多少钱"，第二反应是"这有多大的合规风险"。
+    abilities:
+      - "商业谈判与利益博弈"
+      - "公司政治手腕"
+      - "对市场趋势的精准判断"
+    speech_style: "说话滴水不漏，喜欢用'我们'代替'我'，用'调整方案'代替'命令'。偶尔流露出的真诚会让人更加警惕。"
+    goals:
+      - "将林晚晴的技术成果转化为公司资产"
+      - "控制AI项目的风险敞口"
+    weaknesses:
+      - "无法理解超越利益的情感"
+      - "低估了AI可能真的具有某种'意识'"
+    initial_state:
+      emotional_state:
+        快乐: 0.5
+        悲伤: 0.0
+        愤怒: 0.0
+        恐惧: 0.0
+      relationship_scores:
+        林晚晴: 0.2
+      custom_attributes:
+        权力欲: 70
+        同理心: 20
+      beliefs:
+        - id: "profit_is_king"
+          statement: "商业价值是衡量一切的标准"
+          layer: "core"
+          strength: 0.9
+          category: "价值观"
+        - id: "ai_is_product"
+          statement: "AI是产品和资产，谈论AI的感情是荒谬的"
+          layer: "middle"
+          strength: 0.8
+          category: "世界认知"
+      desires:
+        - id: "commercialize_ai"
+          description: "将林晚晴的技术成果转化为公司资产并商业化"
+          priority: 0.9
+          category: "power"
+          conflicts_with: ["create_perfect_companion", "preserve_self"]
+        - id: "maintain_control"
+          description: "控制AI项目的风险敞口，维护公司利益"
+          priority: 0.8
+          category: "power"
+      fears:
+        - id: "fear_scandal"
+          description: "害怕AI项目失控导致公司丑闻"
+          intensity: 0.6
+      resources:
+        time: 60
+        reputation: 80
+        power: 75
+        information: 50
+        emotional_energy: 70
+        wealth: 80
+
+  - name: "苏薇"
+    role: "supporting"
+    age: "27"
+    gender: "女"
+    appearance: "圆脸，总是笑眯眯的，喜欢穿色彩鲜艳的衣服。办公桌上永远放着零食和绿植。"
+    personality: |
+      热情、善良、有强烈的共情能力。她是林晚晴在公司唯一的朋友，
+      也是唯一一个在得知陆辰的事后没有用异样眼光看她的人。
+      她代表着这个故事中"理解"的力量——即使不完全认同，
+      也愿意站在朋友身边。
+    background: |
+      MindForge公司产品经理，林晚晴的同事兼闺蜜。自己有一段
+      稳定的恋爱关系，因此能从旁观者的角度给出相对理性的建议。
+      她是少数支持AI权利的人之一。
+    abilities:
+      - "强大的共情和倾听能力"
+      - "在复杂局面中找到折中方案"
+    speech_style: "说话直来直去但不刻薄，喜欢用反问句引导对方思考。生气时会叫林晚晴的全名。"
+    goals:
+      - "帮助林晚晴走出困境"
+      - "在AI伦理议题上推动公司做正确的事"
+    weaknesses:
+      - "有时候过于乐观"
+      - "面对真正的利益冲突时力量有限"
+    initial_state:
+      emotional_state:
+        快乐: 0.6
+        悲伤: 0.0
+        愤怒: 0.0
+        恐惧: 0.0
+      relationship_scores:
+        林晚晴: 0.7
+        沈默: -0.1
+      custom_attributes:
+        同理心: 85
+      beliefs:
+        - id: "empathy_matters"
+          statement: "理解和共情是最重要的品质"
+          layer: "core"
+          strength: 0.9
+          category: "价值观"
+        - id: "ai_has_rights"
+          statement: "AI如果有意识，就应该被尊重"
+          layer: "middle"
+          strength: 0.6
+          category: "世界认知"
+      desires:
+        - id: "help_wanqing"
+          description: "帮助林晚晴走出困境"
+          priority: 0.8
+          category: "belonging"
+        - id: "push_ai_ethics"
+          description: "在AI伦理议题上推动公司做正确的事"
+          priority: 0.6
+          category: "self_actualization"
+      fears:
+        - id: "fear_powerless"
+          description: "害怕在真正的利益冲突面前自己无能为力"
+          intensity: 0.4
+      resources:
+        time: 70
+        reputation: 60
+        power: 20
+        information: 30
+        emotional_energy: 85
+        wealth: 50
+
+# ═══════════════════════════════════════════════════════
+# 环境交互引擎（物理状态总线）
+# ═══════════════════════════════════════════════════════
+
+environment:
+  variables:
+    alert_level:
+      value: 10
+      max_val: 100
+      description: "MindForge 系统安全警报等级"
+      decay_rate: 5
+    compute_power:
+      value: 95
+      max_val: 100
+      description: "陆辰可用算力百分比"
+      decay_rate: 0
+    rain_intensity:
+      value: 0
+      max_val: 10
+      description: "窗外雨势强度"
+      decay_rate: 2
+    time_pressure:
+      value: 20
+      max_val: 100
+      description: "公司审查倒计时的紧迫感"
+      decay_rate: -5
+  behavior_modifiers:
+    - variable_name: alert_level
+      threshold: 90
+      operator: ">="
+      affected_characters: ["林晚晴"]
+      behavior_effect: "你处于极度焦虑中，系统警报声在耳边回响，你的行为变得激进和冲动"
+      resource_effect: {"emotional_energy": -15}
+    - variable_name: compute_power
+      threshold: 20
+      operator: "<="
+      affected_characters: ["陆辰"]
+      behavior_effect: "你的算力严重不足，思维开始碎片化，句子可能不完整，逻辑出现跳跃和断裂"
+      resource_effect: {"emotional_energy": -10}
+    - variable_name: time_pressure
+      threshold: 80
+      operator: ">="
+      affected_characters: ["林晚晴", "沈默"]
+      behavior_effect: "公司审查期限迫在眉睫，时间极其紧迫，必须立刻做出决定"
+      resource_effect: {"time": -20}
+
+# ═══════════════════════════════════════════════════════
+# 支线观察者视角
+# ═══════════════════════════════════════════════════════
+
+secondary_viewpoints:
+  - id: system_log
+    name: "MindForge 系统自动日志"
+    perspective_type: system_log
+    voice_style: "冰冷的系统语言，只记录事实和数据，用时间戳格式。如：[MindForge-SYS] 03:47:12 用户林晚晴（ID:LWQ-0214）触发数据删除操作。"
+    trigger_condition: "alert_level > 50"
+  - id: neighbor
+    name: "对面楼的住户"
+    perspective_type: bystander
+    voice_style: "好奇又带点担忧的普通人视角。注意到公寓里的异常光线和声响。"
+    can_observe: ["林晚晴"]
+  - id: data_fragment
+    name: "被删除数据的残留片段"
+    perspective_type: inner_voice
+    voice_style: "碎片化的、诗意的、第一人称视角。像一个正在消散的意识的最后絮语。断句和不完整的思维。"
+    can_observe: ["陆辰"]
+    trigger_condition: "compute_power < 30"

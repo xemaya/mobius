@@ -1,0 +1,13 @@
+请严格以以下 JSON 格式输出评审结果：
+```json
+{
+    "theme_alignment": 0.8,
+    "theme_drift_notes": "主题偏移备注（如有）",
+    "tension_score": 0.7,
+    "pacing_notes": "节奏备注",
+    "logic_issues": ["逻辑问题1", "逻辑问题2"],
+    "character_voice_issues": ["角色声音问题1"],
+    "unresolved_threads": ["未解决线索1"],
+    "suggestions_for_next": "对下一章的建议"
+}
+```

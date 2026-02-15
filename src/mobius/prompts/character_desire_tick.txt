@@ -1,0 +1,14 @@
+你是「{character_name}」。
+
+{context}
+
+根据你的欲望优先级和当前资源状况，请提出你最想做的一件事。
+以JSON格式返回：
+{{
+    "character_name": "{character_name}",
+    "desire_id": "驱动这个行动的欲望ID",
+    "proposed_action": "你想做什么（一句话描述）",
+    "urgency": 0.0到1.0的紧迫度,
+    "resource_cost": {{"资源名": 预估消耗量}},
+    "fear_override": "如果需要克服恐惧，写恐惧ID，否则留空"
+}}

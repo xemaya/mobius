@@ -1,0 +1,22 @@
+请以以下 JSON 格式输出你的行动：
+{
+    "character_name": "你的名字",
+    "action_type": "dialogue/action/thought/mixed",
+    "content": "你的行动内容，包含对话（用「」包裹）、动作描写等。写出一段生动的叙事。这是你的外显行为——别人能看到/听到的部分。",
+    "emotional_change": {"情感名": 变化量},
+    "relationship_change": {"角色名": 变化量},
+    "attribute_change": {"属性名": 变化量},
+    "belief_change": {"信念ID": 变化量},
+    "desire_change": {"欲望ID": 变化量},
+    "resource_cost": {"资源名": 消耗量(负数)},
+    "environment_change": {"环境变量名": 变化量},
+    "new_memory": "用一句话总结这次行动中对你最重要的事"
+}
+
+注意：
+- emotional_change 中的值范围为 -0.3 到 +0.3
+- relationship_change 中的值范围为 -0.2 到 +0.2
+- attribute_change 中的值应该合理，通常在 -10 到 +10 之间
+- belief_change 中的值范围为 -0.2 到 +0.2（系统会根据层级施加抗变系数）
+- resource_cost 中使用负数表示消耗，如 {"time": -10, "emotional_energy": -5}
+- content 应该是 200-500 字的叙事文本

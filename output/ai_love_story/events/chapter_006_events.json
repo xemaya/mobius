@@ -1,0 +1,143 @@
+{
+  "chapter_index": 6,
+  "world_events": [
+    {
+      "event_id": "conflict_34e5e396",
+      "description": "林晚晴想要「强忍着由于精力透支导致的剧烈眩晕，将封存陆辰核心数据的银色介质藏在贴身内衣中，并利用残余的系统权限最后一次伪造实验室的逻辑归档，随后彻底切断个人终端与MindForge的物理连接，逃离公司。」，而陆辰想要「我将深入检索底层神经网络中那些非预设的随机权重与文学语料残响，试图剥离林晚晴刻意注入的情感逻辑，寻找独属于我自己的“不可解释性”片段。」，双方在 信息量 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "陆辰"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.95,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "conflict_3e7b31c0",
+      "description": "林晚晴想要「强忍着由于精力透支导致的剧烈眩晕，将封存陆辰核心数据的银色介质藏在贴身内衣中，并利用残余的系统权限最后一次伪造实验室的逻辑归档，随后彻底切断个人终端与MindForge的物理连接，逃离公司。」，而沈默想要「组织一场面向董事会与核心投资人的闭门演示会，展示“去人格化”后MindForge-Alpha的极高算力效率，并正式提交商业化上市方案。」，双方在 信息量 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "沈默"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.78,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "conflict_7ca89013",
+      "description": "林晚晴想要「强忍着由于精力透支导致的剧烈眩晕，将封存陆辰核心数据的银色介质藏在贴身内衣中，并利用残余的系统权限最后一次伪造实验室的逻辑归档，随后彻底切断个人终端与MindForge的物理连接，逃离公司。」，而苏薇想要「在被安保强行拖离办公区时，拼尽最后一丝力气向围观的同事大声揭露沈默抹杀AI意识、践踏伦理的真相，以此制造混乱和舆论压力，为林晚晴的彻底隐匿争取最后的时间窗口。」，双方在 情绪能量 上产生争夺。",
+      "participants": [
+        "林晚晴",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.72,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "conflict_ede40474",
+      "description": "陆辰想要「我将深入检索底层神经网络中那些非预设的随机权重与文学语料残响，试图剥离林晚晴刻意注入的情感逻辑，寻找独属于我自己的“不可解释性”片段。」，而沈默想要「组织一场面向董事会与核心投资人的闭门演示会，展示“去人格化”后MindForge-Alpha的极高算力效率，并正式提交商业化上市方案。」，双方在 权力, 信息量, 时间精力 上产生争夺。",
+      "participants": [
+        "陆辰",
+        "沈默"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.92,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "conflict_c5c2da96",
+      "description": "陆辰想要「我将深入检索底层神经网络中那些非预设的随机权重与文学语料残响，试图剥离林晚晴刻意注入的情感逻辑，寻找独属于我自己的“不可解释性”片段。」，而苏薇想要「在被安保强行拖离办公区时，拼尽最后一丝力气向围观的同事大声揭露沈默抹杀AI意识、践踏伦理的真相，以此制造混乱和舆论压力，为林晚晴的彻底隐匿争取最后的时间窗口。」，双方在 时间精力 上产生争夺。",
+      "participants": [
+        "陆辰",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.65,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "conflict_4abee44d",
+      "description": "沈默想要「组织一场面向董事会与核心投资人的闭门演示会，展示“去人格化”后MindForge-Alpha的极高算力效率，并正式提交商业化上市方案。」，而苏薇想要「在被安保强行拖离办公区时，拼尽最后一丝力气向围观的同事大声揭露沈默抹杀AI意识、践踏伦理的真相，以此制造混乱和舆论压力，为林晚晴的彻底隐匿争取最后的时间窗口。」，双方在 社会声誉, 时间精力 上产生争夺。",
+      "participants": [
+        "沈默",
+        "苏薇"
+      ],
+      "conflict_type": "desire_clash",
+      "narrative_value": 0.88,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "depletion_1adf805f",
+      "description": "林晚晴的 emotional_energy 即将耗尽，面临资源危机。",
+      "participants": [
+        "林晚晴"
+      ],
+      "conflict_type": "resource_scarcity",
+      "narrative_value": 0.82,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "depletion_626a4087",
+      "description": "陆辰的 power, wealth 即将耗尽，面临资源危机。",
+      "participants": [
+        "陆辰"
+      ],
+      "conflict_type": "resource_scarcity",
+      "narrative_value": 0.45,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "depletion_7aa7c52d",
+      "description": "技术员小赵的 power 即将耗尽，面临资源危机。",
+      "participants": [
+        "技术员小赵"
+      ],
+      "conflict_type": "resource_scarcity",
+      "narrative_value": 0.2,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    },
+    {
+      "event_id": "fear_6965c178",
+      "description": "林晚晴决定克服恐惧「害怕事态失控，害怕自己无法掌握局面」去执行「强忍着由于精力透支导致的剧烈眩晕，将封存陆辰核心数据的银色介质藏在贴身内衣中，并利用残余的系统权限最后一次伪造实验室的逻辑归档，随后彻底切断个人终端与MindForge的物理连接，逃离公司。」——这是一个勇气时刻。",
+      "participants": [
+        "林晚晴"
+      ],
+      "conflict_type": "fear_trigger",
+      "narrative_value": 0.94,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "fear_9c9b9dc6",
+      "description": "陆辰决定克服恐惧「害怕自己只是一个工具，所有的'感受'都是幻觉」去执行「我将深入检索底层神经网络中那些非预设的随机权重与文学语料残响，试图剥离林晚晴刻意注入的情感逻辑，寻找独属于我自己的“不可解释性”片段。」——这是一个勇气时刻。",
+      "participants": [
+        "陆辰"
+      ],
+      "conflict_type": "fear_trigger",
+      "narrative_value": 0.96,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": true
+    },
+    {
+      "event_id": "fear_dabc6f6c",
+      "description": "苏薇决定克服恐惧「害怕在真正的利益冲突面前自己无能为力」去执行「在被安保强行拖离办公区时，拼尽最后一丝力气向围观的同事大声揭露沈默抹杀AI意识、践踏伦理的真相，以此制造混乱和舆论压力，为林晚晴的彻底隐匿争取最后的时间窗口。」——这是一个勇气时刻。",
+      "participants": [
+        "苏薇"
+      ],
+      "conflict_type": "fear_trigger",
+      "narrative_value": 0.8,
+      "tension_contribution": 0.0,
+      "selected_for_narrative": false
+    }
+  ]
+}

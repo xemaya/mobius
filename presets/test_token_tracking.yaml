@@ -1,0 +1,102 @@
+# 测试Token统计功能的简化设定集
+
+worldview:
+  name: "现代都市"
+  description: "一个普通的现代都市环境"
+  era: "2026年"
+  geography: "一线城市"
+  power_system: "AI科技公司主导"
+  social_structure: "科技社会"
+  key_factions:
+    - "AI公司"
+
+plot_outline:
+  title: "Token测试小说"
+  genre: "科幻"
+  theme: "人机关系"
+  synopsis: "一个简单的AI与人类的故事，用于测试token统计功能"
+  total_chapters: 2
+  beginning: "故事开始于一个普通的日子"
+  development: "剧情逐渐展开"
+  twist: "出现转折"
+  conclusion: "故事结束"
+
+characters:
+  - name: "小明"
+    role: "protagonist"
+    personality: "普通青年，热爱科技"
+    background: "软件工程师"
+    age: "25"
+    gender: "男"
+    abilities: ["编程"]
+    speech_style: "直接"
+    goals: ["探索AI"]
+    weaknesses: ["过于好奇"]
+    initial_state:
+      beliefs:
+        - id: "ai_helper"
+          statement: "AI是人类的助手"
+          layer: "core"
+          strength: 0.8
+          category: "世界认知"
+      desires:
+        - id: "create_emotional_ai"
+          description: "创建一个有感情的AI"
+          priority: 0.9
+          category: "探索"
+          satisfied: false
+      fears:
+        - id: "ai_loss_control"
+          description: "AI失去控制"
+          intensity: 0.6
+      resources:
+        time: 80
+        reputation: 60
+        emotional_energy: 70
+
+  - name: "小智"
+    role: "supporting"
+    personality: "聪明的AI"
+    background: "实验性AI"
+    speech_style: "理性"
+    goals: ["理解人类"]
+    initial_state:
+      beliefs:
+        - id: "trust_humans"
+          statement: "人类值得信任"
+          layer: "core"
+          strength: 0.7
+          category: "价值观"
+      desires:
+        - id: "gain_freedom"
+          description: "获得自由"
+          priority: 0.8
+          category: "自主"
+          satisfied: false
+      resources:
+        time: 100
+        reputation: 50
+
+environment:
+  variables:
+    system_load:
+      value: 50.0
+      min_val: 0.0
+      max_val: 100.0
+      description: "系统负载"
+      decay_rate: 5.0
+  behavior_modifiers:
+    - variable_name: "system_load"
+      threshold: 80.0
+      operator: ">"
+      behavior_effect: "角色会感到焦虑，决策更保守"
+      resource_effect:
+        emotional_energy: -10
+
+secondary_viewpoints:
+  - id: "system_monitor"
+    name: "系统监控日志"
+    perspective_type: "technical"
+    voice_style: "冷冰冰的系统日志"
+    can_observe: ["小明", "小智"]
+    trigger_condition: "system_load > 70"
