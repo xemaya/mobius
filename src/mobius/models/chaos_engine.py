@@ -34,6 +34,7 @@ class ConsequenceType(str, Enum):
     """后果类型。"""
     RELATIONSHIP_RUPTURE = "relationship_rupture"  # 关系破裂
     RESOURCE_LOSS = "resource_loss"  # 资源损失
+    COLLATERAL_DAMAGE = "collateral_damage"  # 附带损害
     THIRD_PARTY_AWAKENING = "third_party_awakening"  # 第三方觉醒
     SYSTEM_EXPOSURE = "system_exposure"  # 系统暴露
     POWER_BACKLASH = "power_backlash"  # 权力反噬

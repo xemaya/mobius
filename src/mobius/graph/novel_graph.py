@@ -29,7 +29,9 @@ from mobius.agents.narrator import create_compile_chapter_node, create_narration
 from mobius.agents.observer import create_observer_node, create_secondary_viewpoint_node
 from mobius.agents.reviewer import create_review_chapter_node
 from mobius.config.settings import NovelConfig
+from mobius.engine.chaos_engine import ChaosEngine
 from mobius.graph.routing import route_after_trigger_check, route_by_next_action
+from mobius.models.chaos_engine import ChaosEngineConfig
 from mobius.output.manager import OutputManager
 from mobius.models.belief import Belief
 from mobius.models.character import CharacterDynamicState, CharacterProfile
@@ -330,6 +332,7 @@ def build_novel_graph(
     observer_model: BaseChatModel | None = None,
     secondary_viewpoints: list[SecondaryViewpoint] | None = None,
     output_manager: OutputManager | None = None,
+    chaos_engine: ChaosEngine | None = None,
 ) -> StateGraph:
     """构建完整的小说生成主图（双循环架构）。"""
     if config is None:
@@ -356,6 +359,7 @@ def build_novel_graph(
         reasoning_model=character_model,
         roleplay_model=roleplay_model,
         enable_internal_monologue=config.enable_internal_monologue,
+        chaos_engine=chaos_engine,
     )
     char_interact = create_character_interact_node(
         character_profiles,
@@ -363,10 +367,11 @@ def build_novel_graph(
         roleplay_model=roleplay_model,
         max_rounds=config.max_interaction_rounds,
         enable_internal_monologue=config.enable_internal_monologue,
+        chaos_engine=chaos_engine,
     )
 
     narration = create_narration_node(narrator_model)
-    compile_chapter = create_compile_chapter_node(narrator_model)
+    compile_chapter = create_compile_chapter_node(narrator_model, chaos_engine)
     review_chapter = create_review_chapter_node(effective_reviewer)
     distill_memory = create_compress_memories_node(
         narrator_model,
@@ -468,6 +473,7 @@ def compile_novel_graph(
     observer_model: BaseChatModel | None = None,
     secondary_viewpoints: list[SecondaryViewpoint] | None = None,
     output_manager: OutputManager | None = None,
+    chaos_engine: ChaosEngine | None = None,
 ):
     """构建并编译主图，带 Checkpointer。"""
     workflow = build_novel_graph(
@@ -481,6 +487,7 @@ def compile_novel_graph(
         observer_model=observer_model,
         secondary_viewpoints=secondary_viewpoints,
         output_manager=output_manager,
+        chaos_engine=chaos_engine,
     )
     checkpointer = InMemorySaver()
     return workflow.compile(checkpointer=checkpointer)

@@ -244,13 +244,63 @@ output/<novel_name>/
   "generation_log": [
     {"type": "chapter", "chapter_index": 1, "title": "...", "word_count": 2500, "timestamp": "..."},
     {"type": "events", "chapter_index": 1, "event_count": 5, "desire_count": 4, "timestamp": "..."}
-  ]
+  ],
+  "token_usage": {
+    "summary": {
+      "total_calls": 120,
+      "total_input_tokens": 450000,
+      "total_output_tokens": 85000,
+      "total_tokens": 535000,
+      "total_duration_ms": 180000,
+      "avg_duration_ms": 1500
+    },
+    "by_operation": { "director": {...}, "character": {...}, "narrator": {...} },
+    "by_model": { "gemini-3-flash-preview": {...}, "M2-her": {...} },
+    "by_chapter": { "1": {...}, "2": {...} }
+  }
 }
+```
+
+**Token 消耗查看**：
+```bash
+cat output/<novel_name>/metadata.json | jq '.token_usage.summary'
 ```
 
 ---
 
-## 5. 生成流水线（双循环架构）
+## 5. Token 消耗统计
+
+系统自动统计所有 LLM 调用的 token 消耗，并在生成结束时写入 `metadata.json` 的 `token_usage` 字段。
+
+| 统计维度 | 说明 |
+|----------|------|
+| `summary` | 总调用次数、总 input/output/total tokens、总耗时 |
+| `by_operation` | 按操作类型（director、character、narrator、reviewer 等） |
+| `by_model` | 按模型（Gemini、MiniMax M2-her 等） |
+| `by_chapter` | 按章节索引 |
+
+**成本估算**（参考，以实际 API 定价为准）：
+- Gemini Flash：约 $0.075/1M input tokens，$0.30/1M output tokens
+- 10 章小说（约 3 万字）通常消耗 50–80 万 tokens，成本约 $0.05–0.15
+
+---
+
+## 6. v2.1 失控型叙事引擎
+
+自 v2.1 起，**失控引擎（Chaos Engine）自动激活**，无需额外配置。包括：
+
+- **去AI味**：犹豫注入、情绪重写、诗意密度控制
+- **认知偏差**：角色决策带系统性缺陷
+- **不可控后果**：附带损害、信息泄露、连锁反应
+- **不可逆印记**：关系损害、心理创伤
+- **信念畸形变异**：非线性信念变化
+- **角色失控**：压力过大时随机触发不可预测行为
+
+详见 [docs/V21_CHAOS_ENGINE.md](V21_CHAOS_ENGINE.md)。
+
+---
+
+## 7. 生成流水线（双循环架构）
 
 每一章的生成经历以下完整管线：
 
@@ -311,7 +361,7 @@ START
 
 ---
 
-## 6. 提示词管理
+## 8. 提示词管理
 
 所有 Agent 的 System Prompt 与代码分离，存放在 `src/mobius/prompts/` 目录：
 
@@ -354,7 +404,7 @@ prompt = format_prompt("character_internal_monologue",
 
 ---
 
-## 7. 项目目录总览
+## 9. 项目目录总览
 
 ```
 mobius/
@@ -407,7 +457,8 @@ mobius/
 │
 ├── docs/                        # 文档
 │   ├── ARCHITECTURE.md          # 架构设计文档
-│   └── USAGE_SPEC.md            # 本文档
+│   ├── USAGE_SPEC.md            # 本文档
+│   └── V21_CHAOS_ENGINE.md      # v2.1 失控引擎说明
 │
 ├── pyproject.toml
 └── README.md
@@ -415,7 +466,7 @@ mobius/
 
 ---
 
-## 8. 后期优化指南
+## 10. 后期优化指南
 
 ### 利用 events/ 数据优化
 

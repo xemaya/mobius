@@ -14,6 +14,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from mobius.agents.utils import extract_response_text
+from mobius.engine.chaos_engine import ChaosEngine
 from mobius.models.chapter import Chapter, Scene
 from mobius.models.character import CharacterAction
 from mobius.models.viewpoint import ViewpointFragment
@@ -84,6 +85,7 @@ def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[s
 
 def create_compile_chapter_node(
     model: BaseChatModel,
+    chaos_engine: ChaosEngine | None = None,
 ) -> Callable[[NovelState], dict[str, Any]]:
     """创建章节编译节点。
 
@@ -202,6 +204,15 @@ def create_compile_chapter_node(
         try:
             response = model.invoke(messages)
             chapter_text = extract_response_text(response).strip()
+
+            # 【v2.1】应用去AI味处理
+            if chaos_engine:
+                chapter_text = chaos_engine.process_text_humanization(
+                    chapter_text,
+                    context=f"章节{chapter_plan.chapter_index}: {chapter_plan.title}"
+                )
+                logger.info("章节文本已应用去AI味处理")
+
             word_count = len(chapter_text)
 
             chapter = Chapter(

@@ -1,7 +1,36 @@
 # Mobius — AI 小说创作多智能体系统
 
-> **版本**: v2.0（深层叙事升级版）  
-> **定位**: 不是"生成故事"的工具，而是"演化世界"的引擎。
+> **版本**: v2.1（失控型叙事引擎）🔥
+> **定位**: 让角色带着偏见做错事，让世界自行失控，让故事自然崩坏。
+
+## 🔥 v2.1 重大升级：失控型叙事引擎
+
+### 核心理念升级
+
+**v2.0**: 角色执行欲望，系统保证张力
+**v2.1**: 角色带着偏见做错事，系统允许世界失控
+
+### 哲学转变
+
+传统AI写作：**作者控制角色** → **角色伤害自己**
+
+v2.1的核心：从"可控叙事"转向"失控演化"，让角色真正拥有自主权，但这种自主权往往带来灾难性后果。
+
+### 新增核心机制
+
+1. **去AI味模块**: 犹豫注入、情绪重写、节奏破坏，让文字更像真实人性
+2. **认知偏差强制**: 角色永远不会做最优选择，总是带着系统性缺陷行动
+3. **不可控后果生成**: 每个行动都产生无法掌控的连锁反应
+4. **不可逆印记系统**: 每章至少产生一个无法修复的损伤
+5. **信念畸形变异**: 信念不再线性衰减，而是发生非线性畸变
+6. **角色失控概率**: 压力过大时随机触发无法预测的行为
+
+### 设计原则
+
+- **不禁止最优选择，而是让角色主动拒绝**
+- **不隐藏后果，而是让后果完全可见**
+- **不稳定信念，而是让信念畸形生长**
+- **不控制节奏，而是主动制造混乱**
 
 ---
 
@@ -409,6 +438,7 @@ models/
 ├── belief.py         # Belief（三层信念）
 ├── chapter.py        # Scene, ChapterPlan, Chapter
 ├── character.py      # CharacterProfile, CharacterDynamicState, CharacterAction
+├── chaos_engine.py   # v2.1 失控引擎数据模型（CognitiveBiasConfig, IrreversibleMark 等）
 ├── desire.py         # Desire, Fear, DesireProposal
 ├── environment.py    # EnvironmentVariable, EnvironmentBehaviorRule, EnvironmentState
 ├── resource.py       # ResourcePool, ResourceCost, ResourceEvent
@@ -417,6 +447,8 @@ models/
 ├── viewpoint.py      # SecondaryViewpoint, ViewpointFragment
 └── worldview.py      # WorldView, PlotOutline
 ```
+
+**v2.1 失控引擎**：`engine/chaos_engine.py` 实现 ChaosEngine，集成 HumanNoiseInjector、CognitiveBiasProcessor、ChaosPropagator、IrreversibleMark、BeliefMutation、LossOfControl 等模块。详见 [V21_CHAOS_ENGINE.md](V21_CHAOS_ENGINE.md)。
 
 ### 关键数据流
 
@@ -651,17 +683,19 @@ mobius/
 ├── pyproject.toml                    # 项目配置与依赖
 ├── README.md                         # 快速入门
 ├── docs/
-│   └── ARCHITECTURE.md               # 本文档
-├── examples/
+│   ├── ARCHITECTURE.md               # 本文档
+│   ├── USAGE_SPEC.md                 # 使用规范
+│   └── V21_CHAOS_ENGINE.md           # v2.1 失控引擎说明
+├── presets/                          # 设定集（原 examples/）
 │   ├── ai_love_story.yaml            # 《她的造物》完整设定集
-│   └── xiyouji_setting.yaml          # 《西游记》测试设定集
+│   └── test_token_tracking.yaml     # Token 统计测试设定集
 ├── output/                           # 生成结果输出目录
 └── src/mobius/
     ├── __init__.py
     ├── main.py                       # CLI 入口
     ├── config/
     │   └── settings.py               # ModelConfig, NovelConfig
-    ├── models/                       # Pydantic 数据模型 (10 个文件)
+    ├── models/                       # Pydantic 数据模型 (11 个文件)
     │   ├── belief.py                 # Belief（三层信念）
     │   ├── chapter.py                # Scene, ChapterPlan, Chapter
     │   ├── character.py              # CharacterProfile/DynamicState/Action
@@ -671,7 +705,20 @@ mobius/
     │   ├── review.py                 # WorldEvent, ChapterReview
     │   ├── triggers.py               # TriggerRule, TriggeredEvent
     │   ├── viewpoint.py              # SecondaryViewpoint, ViewpointFragment
-    │   └── worldview.py              # WorldView, PlotOutline
+    │   ├── worldview.py              # WorldView, PlotOutline
+    │   └── chaos_engine.py           # v2.1 失控引擎数据模型
+    ├── engine/                       # 失控型叙事引擎 (1 个文件)
+    │   └── chaos_engine.py           # ChaosEngine, HumanNoiseInjector, CognitiveBiasProcessor 等
+    ├── prompts/                      # 提示词（与代码分离）
+    │   ├── director_system.txt
+    │   ├── narrator_system.txt
+    │   ├── character_*.txt
+    │   └── ...
+    ├── output/                       # 产出物管理
+    │   └── manager.py                # OutputManager（逐章落盘 + 事件记录）
+    ├── utils/                        # 工具模块
+    │   ├── token_tracker.py          # Token 消耗统计
+    │   └── token_tracking_model.py   # LLM 包装器
     ├── agents/                       # Agent 实现 (7 个文件)
     │   ├── character.py              # 角色 Agent（双阶段 + 双模型 + 欲望提案）
     │   ├── director.py               # 导演/编排者 Agent
@@ -691,7 +738,7 @@ mobius/
         └── minimax.py                # ChatMiniMax (M2-her 角色扮演)
 ```
 
-**代码规模**：31 个 Python 源文件，约 3,500 行代码。
+**代码规模**：约 38 个 Python 源文件。
 
 ---
 
@@ -717,17 +764,24 @@ export MINIMAX_API_KEY="your-minimax-key"
 ### 13.3 运行
 
 ```bash
-# 批量生成
-mobius generate examples/ai_love_story.yaml -o output/ai_love_story
+# 批量生成（自动激活 v2.1 失控引擎）
+mobius generate presets/ai_love_story.yaml -o output/ai_love_story
 
 # 交互模式
-mobius generate examples/ai_love_story.yaml -i -o output/ai_love_story
+mobius generate presets/ai_love_story.yaml -i -o output/ai_love_story
 
-# 详细日志
-mobius generate examples/ai_love_story.yaml -v
+# 详细日志 + Token 统计
+mobius generate presets/ai_love_story.yaml -v -o output/ai_love_story
+
+# 查看 Token 消耗
+cat output/ai_love_story/metadata.json | jq '.token_usage.summary'
 ```
 
-### 13.4 自定义模型
+### 13.4 Token 消耗统计
+
+系统通过 `utils/token_tracker.py` 和 `utils/token_tracking_model.py` 自动统计所有 LLM 调用的 token 消耗。生成结束时写入 `output/<novel_name>/metadata.json` 的 `token_usage` 字段，支持按 operation、model、chapter 维度查看。详见 [USAGE_SPEC.md](USAGE_SPEC.md)。
+
+### 13.5 自定义模型
 
 通过环境变量覆盖：
 

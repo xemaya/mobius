@@ -16,6 +16,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from mobius.agents.utils import extract_json_safe, extract_response_text
+from mobius.engine.chaos_engine import ChaosEngine
 from mobius.models.character import CharacterAction, CharacterDynamicState, CharacterProfile
 from mobius.models.chapter import Scene
 from mobius.models.environment import EnvironmentState
@@ -284,6 +285,7 @@ def create_character_action_node(
     reasoning_model: BaseChatModel,
     roleplay_model: BaseChatModel | None = None,
     enable_internal_monologue: bool = True,
+    chaos_engine: ChaosEngine | None = None,
 ) -> Callable[[NovelState], dict[str, Any]]:
     """创建角色单独行动的节点函数。
 
@@ -394,6 +396,23 @@ def create_character_action_node(
                 # 计算认知失调度（简化：有内心独白就标记 0.5，留给后续优化）
                 if internal_monologue:
                     action.cognitive_dissonance = 0.5
+
+                # 【v2.1】应用失控引擎：让行动带有缺陷
+                if chaos_engine:
+                    chapter_idx = state.get("current_chapter_index", 1)
+                    chaos_result = chaos_engine.process_character_action(
+                        action.content, char_state, chapter_idx
+                    )
+
+                    # 如果有缺陷行动，用它替换原始行动
+                    if chaos_result.get('flawed_action'):
+                        flawed = chaos_result['flawed_action']
+                        action.content = flawed.actual_action
+                        action.cognitive_dissonance = max(action.cognitive_dissonance, flawed.optimality_loss)
+
+                        logger.info("角色 %s 行动被失控引擎修改: 原始最优性 %.2f, 实际最优性 %.2f",
+                                  char_name, 1.0, 1.0 - flawed.optimality_loss)
+
                 actions.append(action)
                 logger.info("角色 %s 完成行动: %s", char_name, action.action_type)
             except Exception as e:
@@ -430,6 +449,7 @@ def create_character_interact_node(
     roleplay_model: BaseChatModel | None = None,
     max_rounds: int = 5,
     enable_internal_monologue: bool = True,
+    chaos_engine: ChaosEngine | None = None,
 ) -> Callable[[NovelState], dict[str, Any]]:
     """创建角色交互节点函数。"""
 
@@ -523,6 +543,20 @@ def create_character_interact_node(
                     action.internal_monologue = internal_monologue
                     if internal_monologue:
                         action.cognitive_dissonance = 0.5
+
+                    # 【v2.1】应用失控引擎：让互动行动也带有缺陷
+                    if chaos_engine:
+                        chapter_idx = state.get("current_chapter_index", 1)
+                        chaos_result = chaos_engine.process_character_action(
+                            action.content, char_state, chapter_idx
+                        )
+
+                        # 如果有缺陷行动，用它替换原始行动
+                        if chaos_result.get('flawed_action'):
+                            flawed = chaos_result['flawed_action']
+                            action.content = flawed.actual_action
+                            action.cognitive_dissonance = max(action.cognitive_dissonance, flawed.optimality_loss)
+
                     actions.append(action)
                     # 注意：interaction_log 只包含外显内容，不包含 internal_monologue
                     interaction_log.append(f"[{char_name}]: {action.content[:200]}")

@@ -16,12 +16,14 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from mobius.config.settings import ModelConfig, NovelConfig
+from mobius.engine.chaos_engine import ChaosEngine
 from mobius.graph.novel_graph import (
     compile_novel_graph,
     create_initial_state,
     load_setting_from_yaml,
 )
 from mobius.models.chapter import Chapter
+from mobius.models.chaos_engine import ChaosEngineConfig
 from mobius.output.manager import OutputManager
 
 console = Console()
@@ -158,7 +160,12 @@ def cmd_generate(args: argparse.Namespace) -> None:
         console.print("[yellow]请确保已设置正确的 API Key 环境变量。[/yellow]")
         sys.exit(1)
 
-    # 编译图（注入 OutputManager）
+    # 【v2.1】创建失控引擎
+    chaos_config = ChaosEngineConfig()  # 使用默认配置，可后续扩展为从YAML读取
+    chaos_engine = ChaosEngine(chaos_config)
+    console.print("🔥 [bold red]激活失控型叙事引擎 v2.1[/bold red] - 角色将带着偏见做错事")
+
+    # 编译图（注入 OutputManager 和 ChaosEngine）
     graph = compile_novel_graph(
         director_model=director_model,
         character_model=character_model,
@@ -170,6 +177,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
         observer_model=observer_model or director_model,
         secondary_viewpoints=secondary_viewpoints or None,
         output_manager=output_mgr,
+        chaos_engine=chaos_engine,
     )
 
     # 创建初始状态
