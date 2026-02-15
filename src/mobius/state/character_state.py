@@ -287,9 +287,22 @@ def apply_action_to_state(
     if action.resource_cost:
         updated = apply_resource_cost(updated, action.resource_cost)
 
-    # 添加新记忆
+    # 添加新记忆（去重：完全重复或高度相似的不重复追加）
     if action.new_memory:
-        updated.memory.append(action.new_memory)
+        new_m = action.new_memory.strip()
+        if not new_m:
+            return updated
+        # 完全重复则跳过
+        if new_m in updated.memory:
+            return updated
+        # 高度相似：与已有条目前 25 字相同则视为重复（避免 LLM 反复输出同一句）
+        prefix_len = min(25, len(new_m))
+        if prefix_len >= 10:
+            new_prefix = new_m[:prefix_len]
+            for m in updated.memory:
+                if len(m) >= prefix_len and m[:prefix_len] == new_prefix:
+                    return updated
+        updated.memory.append(new_m)
         if len(updated.memory) > max_memory:
             updated.memory = updated.memory[-max_memory:]
 

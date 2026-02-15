@@ -54,11 +54,13 @@ def detect_conflicts(
                     )
                 )
 
-    # 2) 资源枯竭检测
+    # 2) 资源枯竭检测（仅当资源曾为正且现低于阈值时报告，避免 power=0 等"不适用"资源产生噪音）
     for char_name, pool in all_resources.items():
         depleted: list[str] = []
         for field in ["time", "reputation", "power", "emotional_energy", "wealth"]:
-            if getattr(pool, field, 0.0) <= 10:
+            val = getattr(pool, field, 0.0)
+            # 仅当 0 < val <= 10 时视为"即将耗尽"；val<=0 表示不适用或已耗尽，不重复报告
+            if 0 < val <= 10:
                 depleted.append(field)
         if depleted:
             events.append(

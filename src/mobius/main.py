@@ -497,6 +497,9 @@ def _print_output_summary(output_mgr: OutputManager) -> None:
 
 def main() -> None:
     """CLI 主入口。"""
+    from dotenv import load_dotenv
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         prog="mobius",
         description="Mobius - AI 小说创作多 Agent 系统",

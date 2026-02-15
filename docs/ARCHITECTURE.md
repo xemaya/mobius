@@ -317,7 +317,7 @@ class Fear:
 
 **工作流**：每章开始时，每个角色根据自身的欲望排序和资源状况提出 `DesireProposal`（行动提案）。冲突引擎自动检测：
 1. **欲望碰撞**：两个角色想要互斥的东西
-2. **资源争夺**：多个角色争夺同一有限资源
+2. **资源枯竭**：某资源曾为正且现 ≤10 时报告（`val<=0` 如 power=0 不报告，避免噪音）
 3. **恐惧触发**：某角色的行动恰好触发另一角色的恐惧
 
 这些冲突自动成为世界事件，被观察者评估并可能被选入小说。
@@ -413,6 +413,11 @@ class StructuredMemorySummary:
 ```
 
 角色只读取"结构化摘要 + 最近 N 条原始记忆"，而非全量历史。这极大地提高了一致性并控制了 token 消耗。
+
+**state.memory 与 memory/ 文件夹的关系**：
+- `state.character_states[name].memory`：每次行动后 LLM 产出的 `new_memory` 追加而成的原始列表，用于 prompt 的「近期记忆」；会去重（完全重复或前 25 字相同则跳过）。
+- `state.character_states[name].compressed_memory`：蒸馏后的纯文本摘要，用于 prompt 的「长期记忆」。
+- `memory/chapter_X_memory.json`：蒸馏产出的结构化摘要（key_conflicts、relationship_changes 等），持久化供人工查阅；不参与角色 prompt 注入。
 
 ### 6.8 失控型叙事引擎 (Chaos Engine v2.1)
 
