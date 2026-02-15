@@ -30,6 +30,7 @@ from mobius.agents.observer import create_observer_node, create_secondary_viewpo
 from mobius.agents.reviewer import create_review_chapter_node
 from mobius.config.settings import NovelConfig
 from mobius.engine.chaos_engine import ChaosEngine
+from mobius.engine.style_governor import StyleGovernor
 from mobius.graph.routing import route_after_trigger_check, route_by_next_action
 from mobius.models.chaos_engine import ChaosEngineConfig
 from mobius.output.manager import OutputManager
@@ -223,6 +224,43 @@ def _check_triggers_router(state: NovelState) -> dict[str, Any]:
     return {"next_action": "direct_scene"}
 
 
+def _create_style_governor_node(chaos_engine: ChaosEngine | None, model: BaseChatModel | None = None):
+    """创建文风控制器节点。
+
+    注意：此节点通过 in-place 修改最新章节内容来工作，
+    **不能**返回 {"chapters": ...}，否则 add reducer 会导致章节重复。
+    """
+
+    def style_governor_node(state: NovelState) -> dict[str, Any]:
+        if chaos_engine is None:
+            return {}
+
+        chapters = state.get("chapters", [])
+        if not chapters:
+            return {}
+
+        latest_chapter = chapters[-1]
+        
+        # 初始化 StyleGovernor
+        governor = StyleGovernor(chaos_engine.config.style_governor, model=model)
+        
+        # 处理章节内容（in-place 修改，不返回 chapters 列表）
+        original_content = latest_chapter.content
+        processed_content = governor.process_chapter(latest_chapter.title, original_content)
+        
+        # in-place 更新章节内容
+        if processed_content != original_content:
+            logger.info("第%d章内容已由 StyleGovernor 优化", latest_chapter.chapter_index)
+            latest_chapter.content = processed_content
+            latest_chapter.word_count = len(processed_content)
+
+        # 关键：返回空字典。chapters 使用 Annotated[list, add] reducer，
+        # 如果返回 {"chapters": chapters} 会把整个列表追加一次，导致指数级重复。
+        return {}
+
+    return style_governor_node
+
+
 # ────────────────────────────────────────────
 # 持久化节点：每章产出立即落盘
 # ────────────────────────────────────────────
@@ -350,7 +388,7 @@ def build_novel_graph(
     observer_mark = create_observer_node(effective_observer)
 
     # 外循环节点
-    director_plan = create_director_plan_chapter(director_model)
+    director_plan = create_director_plan_chapter(director_model, chaos_engine)
     director_scene = create_director_direct_scene(director_model)
     director_trigger = create_director_handle_trigger(director_model)
 
@@ -372,6 +410,7 @@ def build_novel_graph(
 
     narration = create_narration_node(narrator_model)
     compile_chapter = create_compile_chapter_node(narrator_model, chaos_engine)
+    style_governor = _create_style_governor_node(chaos_engine, narrator_model)
     review_chapter = create_review_chapter_node(effective_reviewer)
     distill_memory = create_compress_memories_node(
         narrator_model,
@@ -411,6 +450,7 @@ def build_novel_graph(
     workflow.add_node("check_triggers", _check_triggers_router)
     workflow.add_node("handle_trigger", director_trigger)
     workflow.add_node("compile_chapter", compile_chapter)
+    workflow.add_node("style_governor", style_governor)
     workflow.add_node("persist_chapter", persist_chapter)
     workflow.add_node("review_chapter", review_chapter)
     workflow.add_node("persist_review", persist_review)
@@ -445,8 +485,9 @@ def build_novel_graph(
     workflow.add_conditional_edges("check_triggers", route_after_trigger_check)
     workflow.add_edge("handle_trigger", "direct_scene")
 
-    # 章节编译 → 持久化落盘 → 支线视角（如有） → 评审 → 持久化评审 → 蒸馏 → 持久化记忆
-    workflow.add_edge("compile_chapter", "persist_chapter")
+    # 章节编译 → 文风控制 → 持久化落盘 → 支线视角（如有） → 评审 → 持久化评审 → 蒸馏 → 持久化记忆
+    workflow.add_edge("compile_chapter", "style_governor")
+    workflow.add_edge("style_governor", "persist_chapter")
 
     if viewpoint_node:
         workflow.add_edge("persist_chapter", "secondary_viewpoints")
@@ -639,6 +680,9 @@ def load_setting_from_yaml(path: str) -> dict[str, Any]:
         for vp in data.get("secondary_viewpoints", [])
     ]
 
+    # 可选：小说生成参数（覆盖 NovelConfig 默认值，用于提速等）
+    novel_config_overrides = data.get("novel_config") or {}
+
     return {
         "worldview": worldview,
         "plot_outline": plot_outline,
@@ -646,4 +690,5 @@ def load_setting_from_yaml(path: str) -> dict[str, Any]:
         "character_states": character_states,
         "environment": environment,
         "secondary_viewpoints": secondary_viewpoints,
+        "novel_config_overrides": novel_config_overrides,
     }

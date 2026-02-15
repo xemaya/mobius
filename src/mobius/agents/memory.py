@@ -14,7 +14,7 @@ from typing import Any, Callable
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_json, extract_response_text
+from mobius.agents.utils import extract_json, extract_response_text, invoke_with_retry
 from mobius.models.character import CharacterDynamicState
 from mobius.models.review import StructuredMemorySummary
 from mobius.prompts import load_prompt
@@ -102,7 +102,9 @@ def create_compress_memories_node(
             ]
 
             try:
-                response = model.invoke(messages)
+                response = invoke_with_retry(
+                    model, messages, operation_name="distill_memory"
+                )
                 text = extract_response_text(response).strip()
 
                 # 尝试提取结构化摘要

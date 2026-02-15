@@ -396,6 +396,92 @@ class ChapterCompletionCriteria(BaseModel):
     )
 
 
+class StyleGovernorConfig(BaseModel):
+    """文风控制器配置：进一步去AI味，实现张弛结构。
+
+    所有替换规则都通过配置字段定义，不在代码中硬编码，可通过 YAML 覆盖。
+    """
+    enabled: bool = Field(default=True, description="是否启用文风控制器")
+    use_llm_post_process: bool = Field(
+        default=True,
+        description="是否使用 LLM 做整章改写（关闭则仅做规则清理，显著提速）",
+    )
+
+    # 1. 比喻密度限制
+    max_metaphors_per_1000_words: int = Field(default=1, description="每千字最大比喻数")
+    forbid_consecutive_imagery: bool = Field(default=True, description="禁止连续段落使用意象句")
+    
+    # 2. 抽象词压缩
+    abstract_nouns_to_kill: List[str] = Field(
+        default_factory=lambda: ["神性", "逻辑", "变量", "深渊", "命运", "毁灭", "救赎", "存在", "本质", "意识"],
+        description="需要杀死的抽象词列表"
+    )
+    max_abstract_nouns_per_chapter: int = Field(default=5, description="每章最大抽象词出现次数")
+    
+    # 3. 哲学台词降频
+    max_philosophical_golden_sentences: int = Field(default=3, description="每章最大总结性金句数")
+    forbid_consecutive_world_explaining: bool = Field(default=True, description="禁止连续页面出现解释世界的台词")
+    
+    # 4. 普通句比例强制
+    min_plain_sentence_ratio: float = Field(default=0.4, ge=0.0, le=1.0, description="最小普通句比例")
+    
+    # 5. 删减策略
+    beautiful_sentence_pruning_ratio: float = Field(default=0.2, description="删掉读着最‘爽’的句子的比例")
+
+
+    # 6. 成语/文艺腔替换规则
+    cliche_replacements: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "\u5982\u9ca0\u5728\u5589": "\u8bf4\u4e0d\u51fa\u8bdd",
+            "\u6cea\u5982\u96e8\u4e0b": "\u773c\u6cea\u6389\u4e0b\u6765",
+            "\u5fc3\u5982\u6b7b\u7070": "\u4ec0\u4e48\u4e5f\u4e0d\u60f3\u505a\u4e86",
+            "\u4e07\u7c41\u4ff1\u5bc2": "\u5f88\u5b89\u9759",
+            "\u4e0d\u5bd2\u800c\u6817": "\u6253\u4e86\u4e2a\u51b7\u6218",
+            "\u604d\u5982\u9694\u4e16": "\u597d\u50cf\u8fc7\u4e86\u5f88\u4e45",
+            "\u523b\u9aa8\u94ed\u5fc3": "\u5fd8\u4e0d\u6389",
+            "\u6495\u5fc3\u88c2\u80ba": "\u5f88\u75db",
+            "\u809d\u80a0\u5bf8\u65ad": "\u96be\u53d7\u5f97\u8981\u547d",
+            "\u9b42\u98de\u9b44\u6563": "\u5413\u4e86\u4e00\u8df3",
+        },
+        description="\u6210\u8bed/\u6587\u827a\u8154\u2192\u53e3\u8bed\u5316\u66ff\u6362\u8868\uff08\u53ef\u5728 YAML \u4e2d\u8986\u76d6\uff09",
+    )
+
+    # 7. \u8fc7\u5ea6\u8bd7\u610f\u6bd4\u55bb\u8bcd\u964d\u7ea7\u89c4\u5219
+    poetic_downgrades: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "\u5b9b\u5982": "\u50cf",
+            "\u4eff\u4f5b": "\u597d\u50cf",
+            "\u72b9\u5982": "\u50cf",
+            "\u604d\u82e5": "\u597d\u50cf",
+            "\u597d\u4f3c": "\u50cf",
+            "\u4e00\u5982": "\u50cf",
+        },
+        description="\u8bd7\u610f\u6bd4\u55bb\u8bcd\u2192\u6734\u7d20\u8bcd\u66ff\u6362\u8868\uff08\u53ef\u5728 YAML \u4e2d\u8986\u76d6\uff09",
+    )
+
+
+class RhythmConfig(BaseModel):
+    """节奏模块配置：张弛算法。"""
+    enabled: bool = Field(default=True, description="是否启用张弛节奏控制")
+    # 节奏序列：高张力 -> 冷却 -> 日常 -> 意外 -> 沉默 -> 再爆发
+    cycle: List[str] = Field(
+        default_factory=lambda: ["high_tension", "cooling", "daily", "unexpected", "silence", "outbreak"]
+    )
+    low_energy_segment_required_after_high_density: bool = Field(
+        default=True, description="高密度情绪段后必须插入低能量段"
+    )
+
+
+class HumanErrorEngineConfig(BaseModel):
+    """角色失误模块配置。"""
+    enabled: bool = Field(default=True, description="是否启用角色失误模块")
+    error_frequency_chapters: int = Field(default=2, description="每隔几章必须犯一次非战略性错误")
+    error_types: List[str] = Field(
+        default_factory=lambda: ["误判他人", "情绪失控", "推理错误", "选择逃避", "不必要的撒谎"]
+    )
+    require_real_consequences: bool = Field(default=True, description="错误必须产生真实后果")
+
+
 # ────────────────────────────────────────────
 # 失控引擎配置
 # ────────────────────────────────────────────
@@ -421,6 +507,20 @@ class ChaosEngineConfig(BaseModel):
     chapter_criteria: ChapterCompletionCriteria = Field(
         default_factory=ChapterCompletionCriteria,
         description="章节完成条件"
+    )
+    
+    # v2.2 新增
+    style_governor: StyleGovernorConfig = Field(
+        default_factory=StyleGovernorConfig,
+        description="文风控制器配置"
+    )
+    rhythm_config: RhythmConfig = Field(
+        default_factory=RhythmConfig,
+        description="节奏控制配置"
+    )
+    human_error_engine: HumanErrorEngineConfig = Field(
+        default_factory=HumanErrorEngineConfig,
+        description="角色失误模块配置"
     )
 
     # 全局参数

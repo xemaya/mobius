@@ -82,6 +82,6 @@ class StructuredMemorySummary(BaseModel):
         default_factory=list, description="信念转变"
     )
     resource_shifts: list[str] = Field(
-        default_factory=list, description="资源变动，如'林晚晴声誉崩盘，从80降至12'"
+        default_factory=list, description="资源变动，如'角色A声誉崩盘，从80降至12'"
     )
     emotional_arc: str = Field(default="", description="情绪弧线概括")

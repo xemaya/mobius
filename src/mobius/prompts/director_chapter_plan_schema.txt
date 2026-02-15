@@ -14,7 +14,7 @@
             "description": "<string, 场景描述/目标>",
             "location": "<string, 地点>",
             "participating_characters": ["<string, 角色名>", ...],
-            "scene_type": "<string, 必须是 single_action 或 interaction 或 narration>",
+            "scene_type": "<string, 必须是 single_action / interaction / narration / silence / daily 之一>",
             "mood": "<string, 氛围>",
             "objectives": ["<string, 剧情目标>", ...],
             "director_notes": "<string, 导演指示>"
@@ -22,4 +22,12 @@
     ]
 }
 ```
-注意：所有字段名都必须与上述 Schema 完全匹配，不要使用其他名称。
+注意：
+1. 所有字段名都必须与上述 Schema 完全匹配，不要使用其他名称。
+2. scene_type 说明：
+   - "single_action": 单角色独自行动
+   - "interaction": 两个或以上角色对话/互动
+   - "narration": 旁白/环境描写
+   - "silence": 沉默场景——无对话，纯环境描写+角色内心流动，300-500字，作为呼吸间隙
+   - "daily": 日常场景——琐碎生活细节（通勤、买饭、洗碗），不推进主线，展示角色的普通一面
+3. 【节奏硬性要求】每章至少包含1个 "silence" 或 "daily" 类型的场景，用于给读者喘息。

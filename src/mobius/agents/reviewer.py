@@ -11,7 +11,7 @@ from typing import Any, Callable
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_json, extract_response_text
+from mobius.agents.utils import extract_json, extract_response_text, invoke_with_retry
 from mobius.models.review import ChapterReview
 from mobius.prompts import load_prompt
 from mobius.state.novel_state import NovelState
@@ -81,10 +81,14 @@ def create_review_chapter_node(
 {REVIEW_SCHEMA}"""
 
         try:
-            response = model.invoke([
-                SystemMessage(content=REVIEWER_SYSTEM_PROMPT),
-                HumanMessage(content=user_prompt),
-            ])
+            response = invoke_with_retry(
+                model,
+                [
+                    SystemMessage(content=REVIEWER_SYSTEM_PROMPT),
+                    HumanMessage(content=user_prompt),
+                ],
+                operation_name="review_chapter",
+            )
             text = extract_response_text(response)
             review_data = extract_json(text)
             review = ChapterReview.model_validate(review_data)

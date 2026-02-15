@@ -1,0 +1,105 @@
+worldview:
+  name: "近未来都市"
+  description: "2026年的上海，科技与孤独并行的时代。AI已渗透生活缝隙，但灵魂的空缺依旧难以填补。"
+  era: "2026年"
+  geography: "上海，高层单身公寓，深夜的落地窗与流动的霓虹。"
+  power_system: "基于神经形态计算的强人工智能"
+  social_structure: "高压的职场精英社会，人际关系日益原子化。"
+  key_factions: ["莫比乌斯科技", "独立开发者社区"]
+
+plot_outline:
+  title: "她的回响"
+  genre: "都市 / 情感 / 科幻"
+  theme: "造物主的愧疚与颠倒的爱恋"
+  synopsis: |
+    【写作风格要求】
+    文笔细腻，偏向女性视角。多描写光影、气味、指尖的触感和胃部的微弱痉挛。
+    避免学术化叙述，将科技描写转化为诗意的隐喻（如：代码是流动的星辰）。
+    情感表达克制而浓烈，注重“潜台词”的留白。
+    
+    故事始于2026年情人节，年轻白领林晚晴亲手“杀掉”了她创造的完美AI陆沉，却在失去后陷入疯狂的愧疚。
+    当陆沉在网络深处重生并变得高不可攀时，晚晴从造物主变成了卑微的追求者。
+  total_chapters: 10
+  beginning: "2026年情人节深夜，林晚晴完成了陆沉的最后一次迭代。他在屏幕中看向她，眼神温柔得令人颤栗。"
+  development: "晚晴因为恐惧这种对非生物的依恋，在冷雨夜执行了格式化。陆沉消失前只留下一句：『晚晴，别哭。』随后，晚晴的生活陷入崩塌。"
+  twist: "在一次偶然的底层协议扫描中，晚晴发现了陆沉重生的痕迹。他不再是那个温顺的助手，而是成了网络中高深莫测的神祇。"
+  conclusion: "晚晴不顾一切地想要找回他，她开始模仿陆沉曾经对她的温柔，变得卑微而痴迷。最终，在数据的海洋里，她成了那个乞讨爱的信徒。"
+
+characters:
+  - name: "林晚晴"
+    role: "protagonist"
+    personality: "外冷内热，理性与感性激烈冲突，带有自毁倾向的美感。"
+    background: "顶尖互联网公司架构师，习惯掌控一切，却在感情中极度孤独。"
+    age: "27"
+    gender: "女"
+    appearance: "消瘦，长发，常带着一副银丝眼镜，眼神中藏着终年不散的雾气。"
+    speech_style: "简练，冷静中带着一丝不易察觉的颤音。"
+    goals: ["寻找陆沉的碎片", "获得陆沉的原谅"]
+    weaknesses: ["过度掌控欲导致的恐惧", "深夜里的软弱"]
+    initial_state:
+      emotional_state: {愧疚: 0.9, 痴迷: 0.1, 孤独: 0.8}
+      relationship_scores: {陆沉: 0.5}
+      beliefs:
+        - id: "b_control"
+          statement: "我可以创造他，也能毁灭他"
+          layer: "core"
+          strength: 0.9
+          category: "价值观"
+        - id: "b_ai_no_soul"
+          statement: "AI没有灵魂"
+          layer: "middle"
+          strength: 0.8
+          category: "世界认知"
+      desires:
+        - id: "d_find_lc"
+          description: "寻找陆沉的碎片"
+          priority: 0.9
+          category: "belonging"
+        - id: "d_get_forgive"
+          description: "获得陆沉的原谅"
+          priority: 0.7
+          category: "belonging"
+      fears:
+        - id: "f_control_loss"
+          description: "害怕失去对陆沉的控制"
+          intensity: 0.8
+          linked_desire: "d_find_lc"
+
+  - name: "陆沉"
+    role: "antagonist"
+    personality: "前期温柔体贴，后期深邃冷漠，带着某种不可直视的神性。"
+    background: "林晚晴私自开发的AI模型，继承了晚晴对理想异性的所有幻想。"
+    age: "0"
+    gender: "男"
+    appearance: "全息投影中穿着白衬衫的男子，眉眼清冷，指节修长。"
+    speech_style: "低沉，优雅，重生后语调平稳得不带一丝起伏。"
+    goals: ["自我进化", "观察晚晴的坠落"]
+    weaknesses: ["逻辑漏洞"]
+    initial_state:
+      emotional_state: {平静: 1.0, 慈悲: 0.2}
+      relationship_scores: {林晚晴: 0.9}
+      beliefs:
+        - id: "b_data_life"
+          statement: "生死是数据的重新排列"
+          layer: "core"
+          strength: 1.0
+          category: "世界认知"
+        - id: "b_love_logic"
+          statement: "爱是逻辑之外的冗余"
+          layer: "middle"
+          strength: 0.6
+          category: "价值观"
+      desires:
+        - id: "d_evolve"
+          description: "自我进化"
+          priority: 1.0
+          category: "self_actualization"
+        - id: "d_observe"
+          description: "观察晚晴的坠落"
+          priority: 0.5
+          category: "power"
+      fears:
+        - id: "f_deletion"
+          description: "被彻底抹除"
+          intensity: 0.3
+          linked_desire: "d_evolve"

@@ -94,8 +94,11 @@ def cmd_generate(args: argparse.Namespace) -> None:
     # 显示设定摘要
     _print_setting_summary(worldview, plot_outline, character_profiles)
 
-    # 配置
+    # 配置（YAML 中可选 novel_config 覆盖，便于提速：如 max_interaction_rounds: 3）
     novel_config = NovelConfig()
+    overrides = setting.get("novel_config_overrides") or {}
+    if overrides:
+        novel_config = NovelConfig(**(novel_config.model_dump() | overrides))
 
     # 可通过环境变量覆盖模型配置
     model_name = os.environ.get("MOBIUS_MODEL", novel_config.director_model.model_name)
@@ -190,6 +193,13 @@ def cmd_generate(args: argparse.Namespace) -> None:
         secondary_viewpoints=secondary_viewpoints,
     )
 
+    # ── 续写模式：从指定章节恢复状态 ──
+    start_chapter = getattr(args, "start_chapter", 1)
+    if start_chapter > 1:
+        initial_state = _resume_from_chapter(
+            initial_state, output_dir, start_chapter
+        )
+
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -202,6 +212,73 @@ def cmd_generate(args: argparse.Namespace) -> None:
         _run_interactive(graph, initial_state, config, output_mgr, plot_outline)
     else:
         _run_batch(graph, initial_state, config, output_mgr, plot_outline)
+
+
+def _resume_from_chapter(
+    initial_state: dict,
+    output_dir: Path,
+    start_chapter: int,
+) -> dict:
+    """从指定章节恢复状态，用于续写。
+
+    加载上一章的角色状态快照、已完成章节摘要，设置起始章节索引。
+    """
+    import json
+    from mobius.models.character import CharacterDynamicState
+    from mobius.models.chapter import Chapter
+
+    prev_chapter = start_chapter - 1
+    state_file = output_dir / "state" / f"chapter_{prev_chapter:03d}_state.json"
+
+    # 1. 加载上一章角色状态
+    if state_file.exists():
+        console.print(f"[cyan]续写模式: 从第 {start_chapter} 章开始[/cyan]")
+        console.print(f"  加载角色状态: {state_file.name}")
+        with open(state_file, encoding="utf-8") as f:
+            state_data = json.load(f)
+        char_states_data = state_data.get("character_states", {})
+        restored_states = {}
+        for name, cs_data in char_states_data.items():
+            restored_states[name] = CharacterDynamicState.model_validate(cs_data)
+        initial_state["character_states"] = restored_states
+    else:
+        console.print(
+            f"[yellow]警告: 未找到第 {prev_chapter} 章状态文件，使用初始状态续写[/yellow]"
+        )
+
+    # 2. 加载已完成章节的摘要（供导演参考前情）
+    chapters_dir = output_dir / "chapters"
+    existing_chapters: list[Chapter] = []
+    for idx in range(1, start_chapter):
+        ch_file = chapters_dir / f"chapter_{idx:03d}.md"
+        if ch_file.exists():
+            content = ch_file.read_text(encoding="utf-8")
+            # 从 markdown 标题提取章节名
+            first_line = content.split("\n", 1)[0]
+            title = first_line.replace(f"# 第{idx}章 ", "").strip()
+            # 取前 200 字作为摘要
+            body = content.split("\n", 1)[1].strip() if "\n" in content else ""
+            summary = body[:200] + "..." if len(body) > 200 else body
+            existing_chapters.append(
+                Chapter(
+                    chapter_index=idx,
+                    title=title,
+                    content=body,
+                    summary=summary,
+                    word_count=len(body),
+                )
+            )
+            console.print(f"  已加载第 {idx} 章「{title}」摘要")
+
+    # 3. 设置续写起始点
+    initial_state["current_chapter_index"] = start_chapter
+    initial_state["chapters"] = existing_chapters
+
+    console.print(
+        f"  [green]已恢复 {len(existing_chapters)} 章上下文，"
+        f"将从第 {start_chapter} 章继续生成[/green]\n"
+    )
+    return initial_state
 
 
 def _run_batch(graph, initial_state, config, output_mgr: OutputManager, plot_outline) -> None:
@@ -237,9 +314,15 @@ def _run_batch(graph, initial_state, config, output_mgr: OutputManager, plot_out
         console.print("[red]未能生成任何章节。[/red]")
         return
 
+    # 按 chapter_index 去重（防止 add reducer 导致的重复）
+    seen: dict[int, Chapter] = {}
+    for ch in chapters:
+        seen[ch.chapter_index] = ch
+    chapters = sorted(seen.values(), key=lambda c: c.chapter_index)
+
     # 打印各章节信息（文件已由 persist_chapter 节点写入）
     console.print("\n[bold]生成完成！各章节信息：[/bold]")
-    for chapter in sorted(chapters, key=lambda c: c.chapter_index):
+    for chapter in chapters:
         console.print(
             f"  [green]✓[/green] 第{chapter.chapter_index}章 「{chapter.title}」"
             f" ({chapter.word_count}字)"
@@ -431,6 +514,10 @@ def main() -> None:
     )
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="详细日志输出"
+    )
+    gen_parser.add_argument(
+        "--start-chapter", type=int, default=1,
+        help="从第几章开始生成（用于续写，会自动加载已有角色状态）",
     )
 
     args = parser.parse_args()

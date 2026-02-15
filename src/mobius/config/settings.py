@@ -54,10 +54,10 @@ class NovelConfig(BaseModel):
 
     # ── 生成参数 ──
     max_interaction_rounds: int = Field(
-        default=5, description="角色互动最大对话轮数"
+        default=3, description="角色互动最大对话轮数（降低可显著提速，默认 3）"
     )
     max_scenes_per_chapter: int = Field(
-        default=6, description="每章最大场景数"
+        default=4, description="每章最大场景数（降低可提速，默认 4）"
     )
     max_memory_entries: int = Field(
         default=50, description="每个角色保留的最大记忆条数（含未压缩的原始记录）"

@@ -98,11 +98,20 @@ class OutputManager:
         return filepath
 
     def save_full_novel(self, chapters: list[Chapter]) -> Path:
-        """将所有章节合并为完整小说。"""
+        """将所有章节合并为完整小说。
+
+        自动按 chapter_index 去重，只保留每章的最后一个版本。
+        """
         filepath = self.root / "full_novel.md"
 
+        # 按 chapter_index 去重：保留每章最后出现的版本
+        seen: dict[int, Chapter] = {}
+        for ch in chapters:
+            seen[ch.chapter_index] = ch
+        unique_chapters = sorted(seen.values(), key=lambda c: c.chapter_index)
+
         parts = [f"# {self.novel_title}\n"]
-        for chapter in sorted(chapters, key=lambda c: c.chapter_index):
+        for chapter in unique_chapters:
             parts.append(f"\n\n---\n\n## 第{chapter.chapter_index}章 {chapter.title}\n\n")
             parts.append(chapter.content)
 

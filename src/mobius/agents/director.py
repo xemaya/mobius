@@ -8,12 +8,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_json, extract_response_text
+from mobius.agents.utils import extract_json, extract_response_text, invoke_with_retry
 from mobius.models.chapter import ChapterPlan, Scene
 from mobius.models.character import CharacterDynamicState, CharacterProfile
 from mobius.models.desire import DesireProposal
@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 # 从外部文件加载提示词
 DIRECTOR_SYSTEM_PROMPT = load_prompt("director_system")
 CHAPTER_PLAN_SCHEMA = load_prompt("director_chapter_plan_schema")
+SCENE_SILENCE_NOTES = load_prompt("scene_silence_notes")
+SCENE_DAILY_NOTES = load_prompt("scene_daily_notes")
+SCENE_DAILY_AUTO_INJECT = load_prompt("scene_daily_auto_inject")
 
 
 def _build_worldview_context(state: NovelState) -> str:
@@ -166,9 +169,9 @@ def _build_review_feedback_context(state: NovelState) -> str:
 # 导演节点函数
 # ────────────────────────────────────────────
 
-def create_director_plan_chapter(model: BaseChatModel):
+def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[ChaosEngine] = None):
     """创建导演的「章节规划」节点函数。
-
+    
     编排者从 narrative_candidates 和欲望提案中组织本章素材。
     """
 
@@ -180,11 +183,42 @@ def create_director_plan_chapter(model: BaseChatModel):
         characters_ctx = _build_characters_summary(state)
         prev_chapters_ctx = _build_previous_chapters_summary(state)
 
-        # 新增：观察者标记的叙事候选
+        # 1. 节奏控制：张弛算法
+        rhythm_instruction = ""
+        if chaos_engine and chaos_engine.config.rhythm_config.enabled:
+            cycle = chaos_engine.config.rhythm_config.cycle
+            rhythm_state = cycle[(current_idx - 1) % len(cycle)]
+            
+            rhythm_descriptions = {
+                "high_tension": "高张力段：冲突爆发，情绪达到顶点，节奏紧凑。",
+                "cooling": "冷却段：冲突后的余震，情绪的回落，节奏放缓。",
+                "daily": "日常段：琐碎的生活细节，平淡的叙述，没有宏大主题。",
+                "unexpected": "意外段：平淡中的突发小插曲，非预期的转折。",
+                "silence": "沉默段：极少的对话，大量的空白和动作描写。",
+                "outbreak": "再爆发：蓄势后的再次冲突，情绪的重新拉升。"
+            }
+            rhythm_instruction = f"\n# 节奏要求（张弛算法）\n当前章节节奏状态：**{rhythm_state}**\n说明：{rhythm_descriptions.get(rhythm_state, '')}"
+            
+            if chaos_engine.config.rhythm_config.low_energy_segment_required_after_high_density:
+                rhythm_instruction += "\n注意：在本章的场景编排中，如果前一个场景是高张力/高密度情绪，请务必插入一个‘低能量场景’（无冲突、无主题，仅环境或简单动作）。"
+
+        # 2. 角色失误：Human Error Engine
+        error_instructions = []
+        if chaos_engine:
+            for char_name in state.get("character_profiles", {}):
+                err_msg = chaos_engine.get_character_error_instruction(current_idx, char_name)
+                if err_msg:
+                    error_instructions.append(f"- {char_name}: {err_msg}")
+        
+        error_ctx = ""
+        if error_instructions:
+            error_ctx = "\n# 角色执行修正（Human Error Engine）\n本章强制要求的角色失误：\n" + "\n".join(error_instructions)
+
+        # 观察者标记的叙事候选
         narrative_ctx = _build_narrative_candidates_context(state)
-        # 新增：角色欲望提案
+        # 角色欲望提案
         desire_ctx = _build_desire_proposals_context(state)
-        # 新增：评审反馈
+        # 评审反馈
         review_ctx = _build_review_feedback_context(state)
 
         # 触发事件
@@ -214,6 +248,10 @@ def create_director_plan_chapter(model: BaseChatModel):
 
 {prev_chapters_ctx}
 
+{rhythm_instruction}
+
+{error_ctx}
+
 {narrative_ctx}
 
 {desire_ctx}
@@ -228,15 +266,17 @@ def create_director_plan_chapter(model: BaseChatModel):
 请编排第 {current_idx} 章（共 {total} 章）。
 
 要求：
-1. **从 narrative_candidates 中选择素材**组织本章（如有）
-2. **尊重角色欲望提案**，让冲突自然发生
-3. 给出章节标题和内容概要
-4. 列出本章的关键事件（3-5个）
-5. 指定参与角色
-6. 设定情感基调
-7. 将章节拆分为 2-5 个场景
-{"8. 请务必将触发事件自然融入章节剧情中" if triggered else ""}
-{"9. 参考评审反馈调整方向" if review_ctx else ""}
+1. **严格遵守上述节奏要求**，在场景编排中体现张弛结构。
+2. **强制执行角色失误指令**（如有），确保错误产生真实后果。
+3. **从 narrative_candidates 中选择素材**组织本章（如有）。
+4. **尊重角色欲望提案**，让冲突自然发生。
+5. 给出章节标题和内容概要。
+6. 列出本章的关键事件（3-5个）。
+7. 指定参与角色和场景。
+8. 设定情感基调。
+9. 将章节拆分为 2-5 个场景。
+{"10. 请务必将触发事件自然融入章节剧情中" if triggered else ""}
+{"11. 参考评审反馈调整方向" if review_ctx else ""}
 
 {CHAPTER_PLAN_SCHEMA}
 
@@ -247,36 +287,66 @@ def create_director_plan_chapter(model: BaseChatModel):
             HumanMessage(content=user_prompt),
         ]
 
-        try:
-            response = model.invoke(messages)
-            content = extract_response_text(response)
-            plan_data = extract_json(content)
-            chapter_plan = ChapterPlan.model_validate(plan_data)
-            chapter_plan.chapter_index = current_idx
+        # 带重试的章节规划（最多 2 次尝试，容错 LLM 输出格式问题）
+        last_error = None
+        for plan_attempt in range(2):
+            try:
+                response = invoke_with_retry(model, messages, operation_name="director_plan_chapter")
+                content = extract_response_text(response)
+                plan_data = extract_json(content)
+                chapter_plan = ChapterPlan.model_validate(plan_data)
+                chapter_plan.chapter_index = current_idx
 
-            for i, scene in enumerate(chapter_plan.scenes):
-                if not scene.scene_id:
-                    scene.scene_id = f"ch{current_idx}_scene{i + 1}"
+                for i, scene in enumerate(chapter_plan.scenes):
+                    if not scene.scene_id:
+                        scene.scene_id = f"ch{current_idx}_scene{i + 1}"
 
-            logger.info(
-                "编排者规划完成: 第%d章「%s」, %d个场景",
-                current_idx,
-                chapter_plan.title,
-                len(chapter_plan.scenes),
-            )
+                # ── 节奏强制：如果导演没有安排 silence/daily 场景，自动注入 ──
+                has_breathing_scene = any(
+                    s.scene_type in ("silence", "daily") for s in chapter_plan.scenes
+                )
+                if not has_breathing_scene and len(chapter_plan.scenes) >= 2:
+                    # 在第2个场景之后插入一个 daily 场景
+                    breathing_scene = Scene(
+                        scene_id=f"ch{current_idx}_breathing",
+                        title="日常间隙",
+                        description="角色在紧张事件之间的日常片刻。",
+                        location="",
+                        participating_characters=[chapter_plan.participating_characters[0]]
+                            if chapter_plan.participating_characters else [],
+                        scene_type="daily",
+                        mood="平静",
+                        objectives=["给读者喘息空间", "展示角色的普通一面"],
+                        director_notes=SCENE_DAILY_AUTO_INJECT,
+                    )
+                    insert_pos = min(2, len(chapter_plan.scenes))
+                    chapter_plan.scenes.insert(insert_pos, breathing_scene)
+                    logger.info("节奏引擎: 为第%d章自动注入日常场景", current_idx)
 
-            return {
-                "chapter_plan": chapter_plan,
-                "scene_queue": list(chapter_plan.scenes),
-                "current_scene": None,
-                "scene_actions": [],
-                "narrative_buffer": [],
-                "triggered_events": [],
-                "next_action": "direct_scene",
-            }
-        except Exception as e:
-            logger.error("编排者规划章节失败: %s", e)
-            return {"error": str(e), "next_action": "end"}
+                logger.info(
+                    "编排者规划完成: 第%d章「%s」, %d个场景",
+                    current_idx,
+                    chapter_plan.title,
+                    len(chapter_plan.scenes),
+                )
+
+                return {
+                    "chapter_plan": chapter_plan,
+                    "scene_queue": list(chapter_plan.scenes),
+                    "current_scene": None,
+                    "scene_actions": [],
+                    "narrative_buffer": [],
+                    "triggered_events": [],
+                    "next_action": "direct_scene",
+                }
+            except Exception as e:
+                last_error = e
+                if plan_attempt == 0:
+                    logger.warning("编排者规划第%d章第 1 次尝试失败 (%s)，重试中...", current_idx, e)
+                else:
+                    logger.error("编排者规划章节失败（已重试）: %s", e)
+
+        return {"error": str(last_error), "next_action": "end"}
 
     return director_plan_chapter
 
@@ -301,7 +371,13 @@ def create_director_direct_scene(model: BaseChatModel):
         scene_type = current_scene.scene_type
         if scene_type == "interaction" and len(current_scene.participating_characters) >= 2:
             next_action = "character_interact"
-        elif scene_type == "narration":
+        elif scene_type in ("narration", "silence", "daily"):
+            # silence 和 daily 场景都由 narration 节点处理，
+            # 但通过 director_notes 传达不同的写作指令
+            if scene_type == "silence" and not current_scene.director_notes:
+                current_scene.director_notes = SCENE_SILENCE_NOTES
+            elif scene_type == "daily" and not current_scene.director_notes:
+                current_scene.director_notes = SCENE_DAILY_NOTES
             next_action = "narration"
         else:
             next_action = "character_action"
@@ -355,7 +431,7 @@ def create_director_handle_trigger(model: BaseChatModel):
         ]
 
         try:
-            response = model.invoke(messages)
+            response = invoke_with_retry(model, messages, operation_name="director_direct_scene")
             result = extract_json(extract_response_text(response))
             narrations = []
             if isinstance(result, list):

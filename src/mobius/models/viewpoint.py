@@ -40,5 +40,5 @@ class ViewpointFragment(BaseModel):
     )
     insertion_hint: str = Field(
         default="",
-        description="建议插入的叙事位置，如'在林晚晴崩溃之后'",
+        description="建议插入的叙事位置，如'在主角崩溃之后'",
     )

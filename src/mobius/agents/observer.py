@@ -12,7 +12,7 @@ from typing import Any, Callable
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_json, extract_response_text
+from mobius.agents.utils import extract_json, extract_response_text, invoke_with_retry
 from mobius.models.environment import EnvironmentState
 from mobius.models.review import WorldEvent
 from mobius.models.viewpoint import SecondaryViewpoint, ViewpointFragment
@@ -85,10 +85,14 @@ def create_observer_node(
 - 新鲜度：是否与最近的事件有足够差异？"""
 
         try:
-            response = model.invoke([
-                SystemMessage(content=OBSERVER_SYSTEM_PROMPT),
-                HumanMessage(content=user_prompt),
-            ])
+            response = invoke_with_retry(
+                model,
+                [
+                    SystemMessage(content=OBSERVER_SYSTEM_PROMPT),
+                    HumanMessage(content=user_prompt),
+                ],
+                operation_name="observer_mark",
+            )
             text = extract_response_text(response)
             evaluations = extract_json(text)
 
@@ -182,10 +186,14 @@ def create_secondary_viewpoint_node(
 请从你的视角描述你观察到的场景。记住保持你独特的叙述风格。"""
 
             try:
-                response = model.invoke([
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=user_prompt),
-                ])
+                response = invoke_with_retry(
+                    model,
+                    [
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=user_prompt),
+                    ],
+                    operation_name="secondary_viewpoint",
+                )
                 content = extract_response_text(response)
                 if content:
                     fragment = ViewpointFragment(

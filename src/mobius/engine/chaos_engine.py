@@ -510,6 +510,31 @@ class LossOfControlEngine:
         )
 
 
+class HumanErrorEngine:
+    """角色失误模块：强制角色犯错并产生后果。"""
+
+    def __init__(self, config: HumanErrorEngineConfig):
+        self.config = config
+
+    def check_for_error(self, chapter_index: int, character_name: str) -> Optional[str]:
+        """检查角色是否在本章犯错。"""
+        if not self.config.enabled:
+            return None
+
+        # 每 2 章犯一次错 (或者基于 chapter_index 的随机触发)
+        # 这里使用 chapter_index % error_frequency == 0 作为触发点
+        # 但为了更自然，我们加上一点随机性，确保每 error_frequency 章至少有一次
+        if chapter_index % self.config.error_frequency_chapters == 0:
+            # 为不同角色错开错误时间
+            seed = hash(character_name) + chapter_index
+            random.seed(seed)
+            if random.random() < 0.7:  # 70% 概率在本章触发错误
+                error_type = random.choice(self.config.error_types)
+                return f"本章你必须犯一个非战略性错误：{error_type}。这个错误必须产生真实的、不可被轻易修复的后果。"
+        
+        return None
+
+
 # ────────────────────────────────────────────
 # 主引擎整合
 # ────────────────────────────────────────────
@@ -527,6 +552,11 @@ class ChaosEngine:
         self.belief_mutator = BeliefMutator()
         self.mark_generator = IrreversibleMarkGenerator()
         self.loss_of_control = LossOfControlEngine(config.loss_of_control_base_probability)
+        self.human_error_engine = HumanErrorEngine(config.human_error_engine)
+
+    def get_character_error_instruction(self, chapter_index: int, character_name: str) -> Optional[str]:
+        """获取角色的错误指令。"""
+        return self.human_error_engine.check_for_error(chapter_index, character_name)
 
     def process_character_action(self, action: str, character_state: CharacterDynamicState, chapter_index: int) -> Dict[str, Any]:
         """处理角色行动，应用所有失控机制。"""

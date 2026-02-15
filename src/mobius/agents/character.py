@@ -15,7 +15,7 @@ from typing import Any, Callable
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_json_safe, extract_response_text
+from mobius.agents.utils import extract_json_safe, extract_response_text, invoke_with_retry
 from mobius.engine.chaos_engine import ChaosEngine
 from mobius.models.character import CharacterAction, CharacterDynamicState, CharacterProfile
 from mobius.models.chapter import Scene
@@ -271,8 +271,35 @@ def _build_state_context(
 
 
 # ──────────────────────────────────────────
-# JSON 输出格式
+# 认知失调度估算
 # ──────────────────────────────────────────
+
+
+def _estimate_dissonance(monologue: str, content: str) -> float:
+    """估算内心独白与外显行为之间的认知失调度。
+
+    使用关键词对比法（轻量、不依赖LLM）：
+    - 内心独白中出现否定/矛盾/隐藏意图时，失调度升高
+    - 外显行为中出现掩饰/平静/微笑等词时，失调度升高
+    """
+    dissonance = 0.3  # 基础值（有内心独白就有一定失调）
+
+    # 内心独白中的矛盾信号
+    inner_signals = ["不想", "害怕", "不敢", "其实", "真正想", "不能说",
+                     "隐瞒", "撒谎", "假装", "伪装", "骗", "不愿意",
+                     "想逃", "后悔", "罪恶感", "愧疚", "嫉妒", "恨"]
+    for signal in inner_signals:
+        if signal in monologue:
+            dissonance += 0.05
+
+    # 外显行为中的掩饰信号
+    outer_masks = ["微笑", "平静", "没事", "没关系", "不在意", "随便",
+                   "笑了笑", "点了点头", "若无其事"]
+    for mask in outer_masks:
+        if mask in content:
+            dissonance += 0.05
+
+    return min(dissonance, 0.95)
 
 
 # ──────────────────────────────────────────
@@ -332,10 +359,14 @@ def create_character_action_node(
                         model_for_monologue = roleplay_model.with_character(
                             character_name=char_name,
                         )
-                    mono_resp = model_for_monologue.invoke([
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=monologue_prompt),
-                    ])
+                    mono_resp = invoke_with_retry(
+                        model_for_monologue,
+                        [
+                            SystemMessage(content=system_prompt),
+                            HumanMessage(content=monologue_prompt),
+                        ],
+                        operation_name="character_monologue",
+                    )
                     internal_monologue = extract_response_text(mono_resp)
                     logger.info("角色 %s 内心独白生成完成 (%d字)", char_name, len(internal_monologue))
                 except Exception as e:
@@ -346,10 +377,14 @@ def create_character_action_node(
                             character_name=char_name,
                             context=context,
                         )
-                        mono_resp = reasoning_model.invoke([
-                            SystemMessage(content=system_prompt),
-                            HumanMessage(content=monologue_prompt),
-                        ])
+                        mono_resp = invoke_with_retry(
+                            reasoning_model,
+                            [
+                                SystemMessage(content=system_prompt),
+                                HumanMessage(content=monologue_prompt),
+                            ],
+                            operation_name="character_monologue",
+                        )
                         internal_monologue = extract_response_text(mono_resp)
                     except Exception:
                         internal_monologue = ""
@@ -360,10 +395,14 @@ def create_character_action_node(
                         character_name=char_name,
                         context=context,
                     )
-                    mono_resp = reasoning_model.invoke([
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=monologue_prompt),
-                    ])
+                    mono_resp = invoke_with_retry(
+                        reasoning_model,
+                        [
+                            SystemMessage(content=system_prompt),
+                            HumanMessage(content=monologue_prompt),
+                        ],
+                        operation_name="character_monologue",
+                    )
                     internal_monologue = extract_response_text(mono_resp)
                 except Exception:
                     internal_monologue = ""
@@ -387,15 +426,19 @@ def create_character_action_node(
             ]
 
             try:
-                response = reasoning_model.invoke(messages)
+                response = invoke_with_retry(
+                    reasoning_model, messages, operation_name="character_action"
+                )
                 text = extract_response_text(response)
                 action_data = extract_json_safe(text, char_name)
                 action = CharacterAction.model_validate(action_data)
                 action.character_name = char_name
                 action.internal_monologue = internal_monologue
-                # 计算认知失调度（简化：有内心独白就标记 0.5，留给后续优化）
+                # 计算认知失调度：基于内心独白与外显行为的文本差异
                 if internal_monologue:
-                    action.cognitive_dissonance = 0.5
+                    action.cognitive_dissonance = _estimate_dissonance(
+                        internal_monologue, action.content
+                    )
 
                 # 【v2.1】应用失控引擎：让行动带有缺陷
                 if chaos_engine:
@@ -496,10 +539,14 @@ def create_character_interact_node(
                             character_name=char_name,
                             context=context,
                         )
-                        mono_resp = mono_model.invoke([
-                            SystemMessage(content=system_prompt),
-                            HumanMessage(content=monologue_prompt),
-                        ])
+                        mono_resp = invoke_with_retry(
+                            mono_model,
+                            [
+                                SystemMessage(content=system_prompt),
+                                HumanMessage(content=monologue_prompt),
+                            ],
+                            operation_name="character_interact_monologue",
+                        )
                         internal_monologue = extract_response_text(mono_resp)
                     except Exception as e:
                         logger.warning("互动中角色 %s 内心独白失败: %s", char_name, e)
@@ -535,14 +582,18 @@ def create_character_interact_node(
                 ]
 
                 try:
-                    response = reasoning_model.invoke(messages)
+                    response = invoke_with_retry(
+                        reasoning_model, messages, operation_name="character_interact"
+                    )
                     text = extract_response_text(response)
                     action_data = extract_json_safe(text, char_name)
                     action = CharacterAction.model_validate(action_data)
                     action.character_name = char_name
                     action.internal_monologue = internal_monologue
                     if internal_monologue:
-                        action.cognitive_dissonance = 0.5
+                        action.cognitive_dissonance = _estimate_dissonance(
+                            internal_monologue, action.content
+                        )
 
                     # 【v2.1】应用失控引擎：让互动行动也带有缺陷
                     if chaos_engine:
@@ -632,10 +683,14 @@ def create_desire_tick_node(
             )
 
             try:
-                response = model.invoke([
-                    SystemMessage(content=build_character_prompt(profile)),
-                    HumanMessage(content=prompt),
-                ])
+                response = invoke_with_retry(
+                    model,
+                    [
+                        SystemMessage(content=build_character_prompt(profile)),
+                        HumanMessage(content=prompt),
+                    ],
+                    operation_name="desire_tick",
+                )
                 text = extract_response_text(response)
                 data = extract_json_safe(text, char_name)
                 proposal = DesireProposal.model_validate(data)

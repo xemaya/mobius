@@ -3,17 +3,30 @@
 from pydantic import BaseModel, Field
 
 
+# 合法的场景类型
+VALID_SCENE_TYPES = {
+    "single_action",   # 单角色行动
+    "interaction",      # 多角色互动
+    "narration",        # 旁白/环境描写
+    "silence",          # 沉默场景：无对话，纯环境+内心流动，300-500字呼吸间隙
+    "daily",            # 日常场景：琐碎生活细节，无宏大主题，展示角色的普通一面
+}
+
+
 class Scene(BaseModel):
     """一个场景的定义。"""
 
     scene_id: str = Field(description="场景唯一标识")
     title: str = Field(default="", description="场景标题")
-    description: str = Field(description="场景描述/目标")
+    description: str = Field(default="", description="场景描述/目标")
     location: str = Field(default="", description="场景发生地点")
     participating_characters: list[str] = Field(description="参与角色名称列表")
     scene_type: str = Field(
         default="single_action",
-        description="场景类型: 'single_action'(单角色行动), 'interaction'(多角色互动), 'narration'(旁白/环境)",
+        description=(
+            "场景类型: 'single_action'(单角色行动), 'interaction'(多角色互动), "
+            "'narration'(旁白/环境), 'silence'(沉默场景), 'daily'(日常场景)"
+        ),
     )
     mood: str = Field(default="", description="场景氛围/基调")
     objectives: list[str] = Field(

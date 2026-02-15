@@ -13,7 +13,7 @@ from typing import Any, Callable
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from mobius.agents.utils import extract_response_text
+from mobius.agents.utils import extract_response_text, invoke_with_retry
 from mobius.engine.chaos_engine import ChaosEngine
 from mobius.models.chapter import Chapter, Scene
 from mobius.models.character import CharacterAction
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 从外部文件加载提示词
 NARRATOR_SYSTEM_PROMPT = load_prompt("narrator_system")
 NARRATION_ONLY_PROMPT = load_prompt("narrator_narration_only")
+COMPILE_INSTRUCTIONS = load_prompt("narrator_compile_instructions")
 
 
 def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[str, Any]]:
@@ -66,7 +67,7 @@ def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[s
         ]
 
         try:
-            response = model.invoke(messages)
+            response = invoke_with_retry(model, messages, operation_name="narration")
             narration = extract_response_text(response).strip()
             logger.info("旁白生成完成: %d 字", len(narration))
             return {
@@ -184,17 +185,7 @@ def create_compile_chapter_node(
 
 ---
 
-请将以上原始素材编织成一篇完整、流畅的小说章节。要求：
-1. 保持角色对话和行动的核心内容
-2. 添加必要的过渡、环境描写和叙事衔接
-3. 确保情节连贯，节奏得当
-4. 章节开头要与上一章结尾自然衔接（如果有的话），不得重复上一章已有的环境描写和意象
-5. 章节结尾要有悬念或总结
-6. 篇幅至少 2500 字，写细写深，不要赶进度
-7. 【潜台词处理】巧妙暗示角色的真实内心，不要直白说出——用文学手法让读者"感受到"言不由衷
-8. 【支线视角融合】在合适位置自然插入支线视角的片段，增加空间感
-
-直接输出小说正文，以章节标题开头。"""
+{COMPILE_INSTRUCTIONS}"""
 
         messages = [
             SystemMessage(content=NARRATOR_SYSTEM_PROMPT),
@@ -202,8 +193,34 @@ def create_compile_chapter_node(
         ]
 
         try:
-            response = model.invoke(messages)
-            chapter_text = extract_response_text(response).strip()
+            # 获取最低字数要求（从 synopsis 中的写作风格要求推断，默认 2500）
+            min_words = 2500
+
+            # 带字数不足重试的编译逻辑（最多重试 1 次）
+            chapter_text = ""
+            for compile_attempt in range(2):
+                response = invoke_with_retry(model, messages, operation_name="compile_chapter")
+                chapter_text = extract_response_text(response).strip()
+
+                if len(chapter_text) >= min_words:
+                    break
+
+                if compile_attempt == 0:
+                    logger.warning(
+                        "章节编译字数不足 (%d < %d)，追加扩写指令重试",
+                        len(chapter_text), min_words,
+                    )
+                    # 追加扩写指令重新请求
+                    expand_msg = HumanMessage(
+                        content=f"你刚才写的章节只有 {len(chapter_text)} 字，远低于要求的 {min_words} 字。"
+                        f"请在以下内容的基础上**大幅扩写**，补充更多的环境描写、角色心理活动、"
+                        f"对话细节和场景过渡。不要重写，而是在原文基础上丰富和展开。"
+                        f"直接输出完整的扩写后章节正文。\n\n原始内容：\n{chapter_text}"
+                    )
+                    messages = [
+                        SystemMessage(content=NARRATOR_SYSTEM_PROMPT),
+                        expand_msg,
+                    ]
 
             # 【v2.1】应用去AI味处理
             if chaos_engine:

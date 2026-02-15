@@ -4,11 +4,58 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
 logger = logging.getLogger(__name__)
+
+# 可重试的异常：网络/限流/临时故障
+RETRYABLE_EXCEPTIONS = (
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+
+
+def invoke_with_retry(
+    model: BaseChatModel,
+    messages: list[BaseMessage],
+    max_retries: int = 2,
+    base_delay: float = 2.0,
+    operation_name: str = "invoke",
+) -> Any:
+    """带重试的 LLM 调用，应对网络抖动与限流。
+
+    - 仅对可重试异常（连接、超时、OS 等）重试，其他异常直接抛出。
+    - 重试间隔指数退避：base_delay, base_delay*2, ...
+    """
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            return model.invoke(messages)
+        except RETRYABLE_EXCEPTIONS as e:
+            last_exc = e
+            if attempt < max_retries:
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    "%s 第 %d 次失败 (%s)，%s 秒后重试",
+                    operation_name,
+                    attempt + 1,
+                    type(e).__name__,
+                    delay,
+                )
+                time.sleep(delay)
+            else:
+                logger.error("%s 重试 %d 次后仍失败: %s", operation_name, max_retries, e)
+                raise
+        except Exception:
+            raise
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("invoke_with_retry unexpected state")
 
 
 def extract_text(content: str | list | Any) -> str:
@@ -44,19 +91,36 @@ def extract_json(text: str) -> Any:
     支持从 markdown 代码块和纯文本中提取。
     """
     # 尝试从 ```json ... ``` 代码块中提取
-    if "```json" in text:
-        start = text.index("```json") + len("```json")
-        end = text.index("```", start)
-        text = text[start:end].strip()
-    elif "```" in text:
-        start = text.index("```") + 3
-        # 跳过可能的语言标记行
-        if "\n" in text[start : start + 20]:
-            start = text.index("\n", start) + 1
-        end = text.index("```", start)
-        text = text[start:end].strip()
+    try:
+        if "```json" in text:
+            start = text.index("```json") + len("```json")
+            end = text.index("```", start)
+            text = text[start:end].strip()
+        elif "```" in text:
+            start = text.index("```") + 3
+            # 跳过可能的语言标记行
+            if "\n" in text[start : start + 20]:
+                start = text.index("\n", start) + 1
+            end = text.index("```", start)
+            text = text[start:end].strip()
+    except ValueError:
+        # 代码块标记不完整（如只有开头没有结尾），尝试用 { } 定位
+        pass
 
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # 兜底：尝试找到第一个 { 和最后一个 }
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            return json.loads(text[first_brace : last_brace + 1])
+        # 尝试找到第一个 [ 和最后一个 ]
+        first_bracket = text.find("[")
+        last_bracket = text.rfind("]")
+        if first_bracket != -1 and last_bracket > first_bracket:
+            return json.loads(text[first_bracket : last_bracket + 1])
+        raise
 
 
 def extract_json_safe(text: str, fallback_name: str = "") -> dict:
