@@ -14,7 +14,19 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from mobius.agents.utils import extract_json, extract_response_text, invoke_with_retry
-from mobius.models.chapter import ChapterPlan, Scene
+from mobius.models.architecture import ChapterContract, NovelBlueprint
+from mobius.models.chapter import (
+    ChapterOutline,
+    ChapterPlan,
+    ChapterStoryboard,
+    Scene,
+    SettingCharacterProfile,
+    SettingEntity,
+    SettingPack,
+    SettingRule,
+    StoryboardScene,
+    TimelineEvent,
+)
 from mobius.models.character import CharacterDynamicState, CharacterProfile
 from mobius.models.desire import DesireProposal
 from mobius.models.review import ChapterReview, WorldEvent
@@ -27,9 +39,17 @@ logger = logging.getLogger(__name__)
 # 从外部文件加载提示词
 DIRECTOR_SYSTEM_PROMPT = load_prompt("director_system")
 CHAPTER_PLAN_SCHEMA = load_prompt("director_chapter_plan_schema")
+OUTLINE_SYSTEM_PROMPT = load_prompt("director_outline_system")
+OUTLINE_SCHEMA = load_prompt("director_outline_schema")
+SETTING_PACK_SYSTEM_PROMPT = load_prompt("director_setting_pack_system")
+SETTING_PACK_SCHEMA = load_prompt("director_setting_pack_schema")
+STORYBOARD_SYSTEM_PROMPT = load_prompt("director_storyboard_system")
+STORYBOARD_SCHEMA = load_prompt("director_storyboard_schema")
 SCENE_SILENCE_NOTES = load_prompt("scene_silence_notes")
 SCENE_DAILY_NOTES = load_prompt("scene_daily_notes")
 SCENE_DAILY_AUTO_INJECT = load_prompt("scene_daily_auto_inject")
+BLUEPRINT_SYSTEM_PROMPT = load_prompt("director_blueprint_system")
+BLUEPRINT_SCHEMA = load_prompt("director_blueprint_schema")
 
 
 def _build_worldview_context(state: NovelState) -> str:
@@ -116,6 +136,42 @@ def _build_previous_chapters_summary(state: NovelState) -> str:
     return "\n".join(lines)
 
 
+def _build_blueprint_context(state: NovelState) -> str:
+    """构建全书蓝图上下文。"""
+    blueprint = state.get("novel_blueprint")
+    if not blueprint:
+        return "（尚未建立全书蓝图）"
+    lines = [
+        "# 全书蓝图",
+        f"主命题：{blueprint.thesis}",
+        f"反命题：{blueprint.antithesis}",
+        f"综合立场：{blueprint.synthesis}",
+    ]
+    if blueprint.chapter_missions:
+        lines.append("章节职责：")
+        for idx, mission in enumerate(blueprint.chapter_missions, start=1):
+            lines.append(f"- 第{idx}章：{mission}")
+    if blueprint.character_arcs:
+        lines.append("角色哲学弧线：")
+        for name, arc in blueprint.character_arcs.items():
+            lines.append(f"- {name}：{arc}")
+    return "\n".join(lines)
+
+
+def _build_thread_ledger_context(state: NovelState) -> str:
+    """构建线索账本上下文。"""
+    ledger = state.get("payoff_ledger", [])
+    if not ledger:
+        return "（暂无线索账本）"
+    lines = ["# 线索账本（优先回收到期项）"]
+    for item in ledger:
+        if item.status != "resolved":
+            lines.append(
+                f"- {item.thread}（来源:第{item.source_chapter}章, 最晚回收:第{item.due_chapter}章, 状态:{item.status}）"
+            )
+    return "\n".join(lines)
+
+
 def _build_narrative_candidates_context(state: NovelState) -> str:
     """构建观察者选出的高价值叙事事件上下文。"""
     world_events = state.get("world_events", [])
@@ -156,10 +212,19 @@ def _build_review_feedback_context(state: NovelState) -> str:
     if last_review.theme_drift_notes:
         lines.append(f"主题偏移：{last_review.theme_drift_notes}")
     lines.append(f"张力评分：{last_review.tension_score:.2f}")
+    lines.append(f"主题推进度：{last_review.theme_progression:.2f}")
+    lines.append(f"线索回收率：{last_review.thread_recovery_rate:.2f}")
+    lines.append(f"章节必要性：{last_review.chapter_necessity:.2f}")
     if last_review.pacing_notes:
         lines.append(f"节奏建议：{last_review.pacing_notes}")
+    if last_review.theme_progression_notes:
+        lines.append(f"主题推进说明：{last_review.theme_progression_notes}")
+    if last_review.chapter_necessity_notes:
+        lines.append(f"章节必要性说明：{last_review.chapter_necessity_notes}")
     if last_review.logic_issues:
         lines.append(f"待修复逻辑问题：" + "；".join(last_review.logic_issues))
+    if last_review.unrecovered_threads:
+        lines.append(f"未回收线索：" + "；".join(last_review.unrecovered_threads))
     if last_review.suggestions_for_next:
         lines.append(f"编排建议：{last_review.suggestions_for_next}")
     return "\n".join(lines)
@@ -220,6 +285,10 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
         desire_ctx = _build_desire_proposals_context(state)
         # 评审反馈
         review_ctx = _build_review_feedback_context(state)
+        # 全书蓝图
+        blueprint_ctx = _build_blueprint_context(state)
+        # 线索账本
+        ledger_ctx = _build_thread_ledger_context(state)
 
         # 触发事件
         triggered = state.get("triggered_events", [])
@@ -242,6 +311,33 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
             ]
             env_ctx = "\n# 当前环境状态\n" + "\n".join(env_lines)
 
+        # ── 信息流管理：已揭露的信息 ──
+        revealed = state.get("revealed_information", [])
+        revealed_ctx = ""
+        if revealed:
+            revealed_ctx = (
+                "\n# 已向读者揭露的信息（不要重复这些，安排新的信息增量）\n- "
+                + "\n- ".join(revealed)
+            )
+
+        # ── 剧情阶段感知 ──
+        stage_ctx = ""
+        if total > 1:
+            progress = current_idx / total
+            if progress <= 0.25:
+                stage = "起"
+                stage_desc = "建立世界观，介绍角色，铺垫冲突种子。重点：让读者理解设定。"
+            elif progress <= 0.5:
+                stage = "承"
+                stage_desc = "发展角色关系，升级冲突，揭示更多背景。重点：加深角色塑造。"
+            elif progress <= 0.75:
+                stage = "转"
+                stage_desc = "重大转折，信念崩塌，不可逆事件。重点：打破读者预期。"
+            else:
+                stage = "合"
+                stage_desc = "收束线索，角色弧线完成，余韵留白。重点：不要强行圆满。"
+            stage_ctx = f"\n# 剧情阶段\n当前处于「{stage}」（第{current_idx}章/共{total}章，进度{progress:.0%}）\n{stage_desc}"
+
         user_prompt = f"""{worldview_ctx}
 
 {characters_ctx}
@@ -258,9 +354,17 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
 
 {review_ctx}
 
+{blueprint_ctx}
+
+{ledger_ctx}
+
 {trigger_ctx}
 
 {env_ctx}
+
+{revealed_ctx}
+
+{stage_ctx}
 
 ---
 请编排第 {current_idx} 章（共 {total} 章）。
@@ -275,8 +379,10 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
 7. 指定参与角色和场景。
 8. 设定情感基调。
 9. 将章节拆分为 2-5 个场景。
-{"10. 请务必将触发事件自然融入章节剧情中" if triggered else ""}
-{"11. 参考评审反馈调整方向" if review_ctx else ""}
+10. 明确声明本章如何服务全书主命题（chapter_purpose/theme_move/philosophical_beat）。
+11. 明确本章要回收哪些线索（required_payoffs）以及本章新埋哪些承诺（new_promises）。
+{"- 请务必将触发事件自然融入章节剧情中" if triggered else ""}
+{"- 参考评审反馈调整方向" if review_ctx else ""}
 
 {CHAPTER_PLAN_SCHEMA}
 
@@ -294,6 +400,16 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
                 response = invoke_with_retry(model, messages, operation_name="director_plan_chapter")
                 content = extract_response_text(response)
                 plan_data = extract_json(content)
+                if isinstance(plan_data, dict) and isinstance(plan_data.get("scenes"), list):
+                    for scene in plan_data["scenes"]:
+                        if not isinstance(scene, dict):
+                            continue
+                        signal = str(scene.get("thesis_signal", "")).strip().lower()
+                        # LLM 常把 thesis_signal 错写为 invert，这里归并为 challenge。
+                        if signal == "invert":
+                            scene["thesis_signal"] = "challenge"
+                        elif signal not in {"support", "challenge", "suspend"}:
+                            scene["thesis_signal"] = "suspend"
                 chapter_plan = ChapterPlan.model_validate(plan_data)
                 chapter_plan.chapter_index = current_idx
 
@@ -301,43 +417,72 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
                     if not scene.scene_id:
                         scene.scene_id = f"ch{current_idx}_scene{i + 1}"
 
-                # ── 节奏强制：如果导演没有安排 silence/daily 场景，自动注入 ──
-                has_breathing_scene = any(
-                    s.scene_type in ("silence", "daily") for s in chapter_plan.scenes
-                )
-                if not has_breathing_scene and len(chapter_plan.scenes) >= 2:
-                    # 在第2个场景之后插入一个 daily 场景
-                    breathing_scene = Scene(
-                        scene_id=f"ch{current_idx}_breathing",
-                        title="日常间隙",
-                        description="角色在紧张事件之间的日常片刻。",
-                        location="",
-                        participating_characters=[chapter_plan.participating_characters[0]]
-                            if chapter_plan.participating_characters else [],
-                        scene_type="daily",
-                        mood="平静",
-                        objectives=["给读者喘息空间", "展示角色的普通一面"],
-                        director_notes=SCENE_DAILY_AUTO_INJECT,
+                # ── 节奏弹性控制：仅在连续高张力后才注入日常场景 ──
+                if len(chapter_plan.scenes) >= 3:
+                    # 检测是否存在连续 2 个高张力场景（非 silence/daily/narration）
+                    consecutive_intense = 0
+                    needs_breathing = False
+                    for s in chapter_plan.scenes:
+                        if s.scene_type in ("silence", "daily", "narration"):
+                            consecutive_intense = 0
+                        else:
+                            consecutive_intense += 1
+                            if consecutive_intense >= 2:
+                                needs_breathing = True
+                                break
+
+                    has_breathing = any(
+                        s.scene_type in ("silence", "daily") for s in chapter_plan.scenes
                     )
-                    insert_pos = min(2, len(chapter_plan.scenes))
-                    chapter_plan.scenes.insert(insert_pos, breathing_scene)
-                    logger.info("节奏引擎: 为第%d章自动注入日常场景", current_idx)
+                    if needs_breathing and not has_breathing:
+                        breathing_scene = Scene(
+                            scene_id=f"ch{current_idx}_breathing",
+                            title="日常间隙",
+                            description="角色在紧张事件之间的日常片刻。",
+                            location="",
+                            participating_characters=[chapter_plan.participating_characters[0]]
+                                if chapter_plan.participating_characters else [],
+                            scene_type="daily",
+                            mood="平静",
+                            objectives=["给读者喘息空间"],
+                            director_notes=SCENE_DAILY_AUTO_INJECT,
+                        )
+                        insert_pos = min(2, len(chapter_plan.scenes))
+                        chapter_plan.scenes.insert(insert_pos, breathing_scene)
+                        logger.info("节奏引擎: 第%d章连续高张力，自动注入日常场景", current_idx)
+
+                # ── 收集本章各场景的 information_revelation 到全局状态 ──
+                new_revelations = [
+                    s.information_revelation
+                    for s in chapter_plan.scenes
+                    if s.information_revelation.strip()
+                ]
 
                 logger.info(
-                    "编排者规划完成: 第%d章「%s」, %d个场景",
+                    "编排者规划完成: 第%d章「%s」, %d个场景, %d条新信息揭露",
                     current_idx,
                     chapter_plan.title,
                     len(chapter_plan.scenes),
+                    len(new_revelations),
                 )
 
                 return {
                     "chapter_plan": chapter_plan,
+                    "chapter_contract": ChapterContract(
+                        chapter_index=current_idx,
+                        chapter_purpose=chapter_plan.chapter_purpose,
+                        theme_move=chapter_plan.theme_move,
+                        required_payoffs=chapter_plan.required_payoffs,
+                        new_promises=chapter_plan.new_promises,
+                        philosophical_beat=chapter_plan.philosophical_beat,
+                    ),
                     "scene_queue": list(chapter_plan.scenes),
                     "current_scene": None,
                     "scene_actions": [],
                     "narrative_buffer": [],
                     "triggered_events": [],
-                    "next_action": "direct_scene",
+                    "revealed_information": new_revelations,
+                    "next_action": "chapter_contract",
                 }
             except Exception as e:
                 last_error = e
@@ -349,6 +494,115 @@ def create_director_plan_chapter(model: BaseChatModel, chaos_engine: Optional[Ch
         return {"error": str(last_error), "next_action": "end"}
 
     return director_plan_chapter
+
+
+def create_director_blueprint_refresh(model: BaseChatModel):
+    """创建/刷新全书蓝图节点。"""
+
+    def blueprint_refresh(state: NovelState) -> dict[str, Any]:
+        # 仅在首章强制生成；后续章节可按评审反馈渐进刷新
+        existing = state.get("novel_blueprint")
+        current_idx = state.get("current_chapter_index", 1)
+        if existing and current_idx > 1:
+            return {"next_action": "plan_chapter"}
+
+        worldview_ctx = _build_worldview_context(state)
+        characters_ctx = _build_characters_summary(state)
+        prev_ctx = _build_previous_chapters_summary(state)
+        total = state.get("total_chapters", 10)
+
+        user_prompt = f"""{worldview_ctx}
+
+{characters_ctx}
+
+{prev_ctx}
+
+---
+请为这部共 {total} 章的小说生成“全书蓝图”。
+要求：
+1. 给出主命题、反命题、最终综合立场。
+2. 为每章指定一句“章节职责”（chapter_missions，长度应等于总章节数）。
+3. 给出主要角色的哲学弧线（character_arcs）。
+
+{BLUEPRINT_SCHEMA}
+"""
+        messages = [
+            SystemMessage(content=BLUEPRINT_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+        try:
+            response = invoke_with_retry(model, messages, operation_name="director_blueprint_refresh")
+            payload = extract_json(extract_response_text(response))
+            blueprint = NovelBlueprint.model_validate(payload)
+            if len(blueprint.chapter_missions) < total:
+                # 不足时补齐，避免后续索引越界
+                blueprint.chapter_missions.extend(
+                    ["围绕主命题推进冲突与角色弧线"] * (total - len(blueprint.chapter_missions))
+                )
+            logger.info("全书蓝图已建立：主命题=%s", blueprint.thesis)
+            return {"novel_blueprint": blueprint, "next_action": "plan_chapter"}
+        except Exception as e:
+            logger.warning("全书蓝图生成失败，使用降级蓝图：%s", e)
+            fallback = NovelBlueprint(
+                thesis=state.get("theme", "人与AI之间的权力与爱的悖论"),
+                antithesis="控制欲与被控制欲互换后的失衡",
+                synthesis="爱无法通过完全控制得到，只会在失控中显形",
+                chapter_missions=["推进冲突与主题"] * total,
+                character_arcs={name: "从执念走向自我认知裂变" for name in state.get("character_profiles", {})},
+            )
+            return {"novel_blueprint": fallback, "next_action": "plan_chapter"}
+
+    return blueprint_refresh
+
+
+def create_director_chapter_contract():
+    """章节合同校验节点：强约束章节结构完整性。"""
+
+    def chapter_contract_node(state: NovelState) -> dict[str, Any]:
+        chapter_plan = state.get("chapter_plan")
+        if chapter_plan is None:
+            return {"next_action": "plan_chapter"}
+
+        required_text_fields = [
+            chapter_plan.chapter_purpose.strip(),
+            chapter_plan.philosophical_beat.strip(),
+            chapter_plan.summary.strip(),
+        ]
+        scene_ok = all(
+            s.title.strip() and s.description.strip() and s.causal_to.strip()
+            for s in chapter_plan.scenes
+        )
+        chapter_ok = all(required_text_fields) and bool(chapter_plan.new_promises) and scene_ok
+        if chapter_ok:
+            contract = ChapterContract(
+                chapter_index=chapter_plan.chapter_index,
+                chapter_purpose=chapter_plan.chapter_purpose,
+                theme_move=chapter_plan.theme_move,
+                required_payoffs=chapter_plan.required_payoffs,
+                new_promises=chapter_plan.new_promises,
+                philosophical_beat=chapter_plan.philosophical_beat,
+            )
+            metadata = dict(state.get("metadata", {}))
+            metadata["chapter_contract_retries"] = 0
+            return {
+                "chapter_contract": contract,
+                "metadata": metadata,
+                "next_action": "direct_scene",
+            }
+
+        retries = int((state.get("metadata") or {}).get("chapter_contract_retries", 0))
+        if retries >= 1:
+            logger.warning("章节合同校验未通过，但已重试一次，降级放行到 direct_scene")
+            metadata = dict(state.get("metadata", {}))
+            metadata["chapter_contract_retries"] = 0
+            return {"metadata": metadata, "next_action": "direct_scene"}
+
+        logger.info("章节合同校验未通过，回退重规划")
+        metadata = dict(state.get("metadata", {}))
+        metadata["chapter_contract_retries"] = retries + 1
+        return {"metadata": metadata, "next_action": "plan_chapter"}
+
+    return chapter_contract_node
 
 
 def create_director_direct_scene(model: BaseChatModel):
@@ -453,3 +707,334 @@ def create_director_handle_trigger(model: BaseChatModel):
             return {"triggered_events": [], "next_action": "direct_scene"}
 
     return director_handle_trigger
+
+
+def create_generate_outlines_node(model: BaseChatModel):
+    """生成全书章节概要（Phase1）。"""
+
+    def generate_outlines_node(state: NovelState) -> dict[str, Any]:
+        total = state.get("total_chapters", 10)
+        blueprint = state.get("novel_blueprint")
+        setting_pack: SettingPack | None = state.get("setting_pack")
+        worldview_ctx = _build_worldview_context(state)
+        characters_ctx = _build_characters_summary(state)
+        blueprint_ctx = _build_blueprint_context(state)
+        guardrails = state.get("global_guardrails", [])
+        guardrails_ctx = "\n".join(f"- {g}" for g in guardrails) if guardrails else "（无）"
+
+        mission_lines: list[str] = []
+        if blueprint and blueprint.chapter_missions:
+            for idx, mission in enumerate(blueprint.chapter_missions[:total], start=1):
+                mission_lines.append(f"- 第{idx}章：{mission}")
+        else:
+            mission_lines = [f"- 第{i}章：围绕主命题推进冲突并产生不可逆后果" for i in range(1, total + 1)]
+
+        setting_ctx = "（尚未生成结构化设定集）"
+        if setting_pack:
+            setting_ctx = (
+                f"# 结构化设定集\n"
+                f"主旨：{setting_pack.theme}\n"
+                f"世界规则：{'；'.join(setting_pack.worldview_rules) if setting_pack.worldview_rules else '（无）'}\n"
+                f"关键时间线：{'；'.join(setting_pack.core_events_timeline) if setting_pack.core_events_timeline else '（无）'}\n"
+                f"待补完：{'；'.join(setting_pack.missing_items) if setting_pack.missing_items else '（无）'}"
+            )
+
+        user_prompt = f"""{worldview_ctx}
+
+{characters_ctx}
+
+{blueprint_ctx}
+
+{setting_ctx}
+
+# 章节职责（必须逐章覆盖）
+{chr(10).join(mission_lines)}
+
+# 全书硬约束
+{guardrails_ctx}
+
+---
+请一次性生成 1 到 {total} 章的概要，要求：
+1. 每章 300-500 字 core_plot。
+2. 每章必须有明确且不可逆的变化（irreversible_change）。
+3. 每章职责不能重复，且要形成连续推进。
+4. 每章至少提供 1 条 must_payoffs 与 1 条 new_promises（如确实没有可填“（无）”）。
+5. character_arc_delta 必须反映角色阶段性变化，而非抽象空话。
+
+{OUTLINE_SCHEMA}
+"""
+
+        messages = [
+            SystemMessage(content=OUTLINE_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+
+        try:
+            response = invoke_with_retry(model, messages, operation_name="generate_outlines")
+            payload = extract_json(extract_response_text(response))
+            raw_outlines = payload.get("outlines", []) if isinstance(payload, dict) else payload
+            if not isinstance(raw_outlines, list):
+                raise ValueError("outlines 输出格式错误：必须是数组")
+
+            outlines: list[ChapterOutline] = []
+            for idx, item in enumerate(raw_outlines[:total], start=1):
+                if isinstance(item, dict):
+                    item.setdefault("chapter_index", idx)
+                    outlines.append(ChapterOutline.model_validate(item))
+
+            if len(outlines) < total:
+                # LLM 少给章节时补齐占位，避免流程中断
+                for i in range(len(outlines) + 1, total + 1):
+                    outlines.append(
+                        ChapterOutline(
+                            chapter_index=i,
+                            title=f"第{i}章",
+                            purpose=f"推进第{i}章主线职责",
+                            core_plot=f"第{i}章核心剧情待补充。",
+                            irreversible_change="角色关系发生不可逆变化（待细化）",
+                            character_arc_delta="角色弧线出现阶段性位移（待细化）",
+                            must_payoffs=["（无）"],
+                            new_promises=["（无）"],
+                        )
+                    )
+
+            logger.info("全书概要生成完成: %d 章", len(outlines))
+            return {
+                "chapter_outlines": outlines,
+                "outline_approved": False,
+                "next_action": "persist_outlines",
+            }
+        except Exception as e:
+            logger.error("全书概要生成失败: %s", e)
+            return {"error": str(e), "next_action": "end"}
+
+    return generate_outlines_node
+
+
+def create_generate_setting_pack_node(model: BaseChatModel):
+    """第一层：设定集结构化与补完。"""
+
+    def generate_setting_pack_node(state: NovelState) -> dict[str, Any]:
+        worldview_ctx = _build_worldview_context(state)
+        characters_ctx = _build_characters_summary(state)
+        total = state.get("total_chapters", 10)
+        outlines = state.get("chapter_outlines", [])
+        outline_ctx = "（尚无章节概要）"
+        if outlines:
+            outline_lines = []
+            for out in outlines:
+                outline_lines.append(
+                    f"- 第{out.chapter_index}章 {out.title} | 职责:{out.purpose} | 不可逆:{out.irreversible_change}"
+                )
+            outline_ctx = "\n".join(outline_lines)
+
+        user_prompt = f"""{worldview_ctx}
+
+{characters_ctx}
+
+# 已有章节概要（用于反向补完设定）
+{outline_ctx}
+
+---
+请为这部预计 {total} 章的小说生成结构化设定集（SettingPack）。
+要求：
+1. 提炼主旨命题。
+2. 提炼世界规则（硬约束）。
+3. 输出关键事件时间线（至少8条）。
+4. 输出角色细化档案，尤其要包含：思考习惯、性格特征、衣着打扮、首次出场章节与出场约束。
+5. 输出组织与关键物件设定，并给出约束与待补完问题。
+6. 输出 theme_longform 与 worldview_longform（建议千字级深描）。
+7. 给出缺失项补完建议（missing_items），用于后续分镜与扩写阶段持续迭代。
+
+{SETTING_PACK_SCHEMA}
+"""
+        messages = [
+            SystemMessage(content=SETTING_PACK_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+        try:
+            response = invoke_with_retry(model, messages, operation_name="generate_setting_pack")
+            payload = extract_json(extract_response_text(response))
+            entities_raw = payload.get("entities", []) if isinstance(payload, dict) else []
+            entities = []
+            for item in entities_raw:
+                if isinstance(item, dict):
+                    entities.append(SettingEntity.model_validate(item))
+            rules_raw = payload.get("detailed_rules", []) if isinstance(payload, dict) else []
+            detailed_rules = []
+            for item in rules_raw:
+                if isinstance(item, dict):
+                    detailed_rules.append(SettingRule.model_validate(item))
+            timeline_raw = payload.get("timeline_events", []) if isinstance(payload, dict) else []
+            timeline_events = []
+            for item in timeline_raw:
+                if isinstance(item, dict):
+                    timeline_events.append(TimelineEvent.model_validate(item))
+            chars_raw = payload.get("characters", []) if isinstance(payload, dict) else []
+            character_profiles = []
+            for item in chars_raw:
+                if isinstance(item, dict):
+                    character_profiles.append(SettingCharacterProfile.model_validate(item))
+            org_raw = payload.get("organizations", []) if isinstance(payload, dict) else []
+            organizations = []
+            for item in org_raw:
+                if isinstance(item, dict):
+                    organizations.append(SettingEntity.model_validate(item))
+            items_raw = payload.get("items", []) if isinstance(payload, dict) else []
+            items = []
+            for item in items_raw:
+                if isinstance(item, dict):
+                    items.append(SettingEntity.model_validate(item))
+            setting_pack = SettingPack(
+                title=payload.get("title") if isinstance(payload, dict) else state["plot_outline"].title,
+                theme=payload.get("theme") if isinstance(payload, dict) else state.get("theme", ""),
+                theme_longform=payload.get("theme_longform", "") if isinstance(payload, dict) else "",
+                worldview_longform=payload.get("worldview_longform", "") if isinstance(payload, dict) else "",
+                worldview_rules=payload.get("worldview_rules", []) if isinstance(payload, dict) else [],
+                detailed_rules=detailed_rules,
+                core_events_timeline=payload.get("core_events_timeline", []) if isinstance(payload, dict) else [],
+                timeline_events=timeline_events,
+                entities=entities,
+                characters=character_profiles,
+                organizations=organizations,
+                items=items,
+                missing_items=payload.get("missing_items", []) if isinstance(payload, dict) else [],
+                author_notes=payload.get("author_notes", "") if isinstance(payload, dict) else "",
+            )
+            return {
+                "setting_pack": setting_pack,
+                "setting_approved": False,
+                "next_action": "persist_setting_pack",
+            }
+        except Exception as e:
+            logger.error("结构化设定集生成失败: %s", e)
+            return {"error": str(e), "next_action": "end"}
+
+    return generate_setting_pack_node
+
+
+def create_generate_storyboards_node(model: BaseChatModel):
+    """第三层：按章节概要生成分镜。"""
+
+    def generate_storyboards_node(state: NovelState) -> dict[str, Any]:
+        outlines = state.get("chapter_outlines", [])
+        setting_pack: SettingPack | None = state.get("setting_pack")
+        guardrails = state.get("global_guardrails", [])
+        if not outlines:
+            return {"error": "缺少章节概要，无法生成分镜", "next_action": "end"}
+
+        setting_ctx = "（无）"
+        if setting_pack:
+            char_guardrails = "（无）"
+            if setting_pack.characters:
+                char_guardrails = "\n".join(
+                    f"- {c.name}: 首次出场>=第{c.first_appearance_chapter}章；时机={c.first_appearance_moment or '未注明'}"
+                    for c in setting_pack.characters
+                )
+            setting_ctx = (
+                f"主题：{setting_pack.theme}\n"
+                f"世界规则：{'；'.join(setting_pack.worldview_rules) if setting_pack.worldview_rules else '（无）'}\n"
+                f"关键时间线：{'；'.join(setting_pack.core_events_timeline[:10]) if setting_pack.core_events_timeline else '（无）'}\n"
+                f"角色出场约束：\n{char_guardrails}"
+            )
+        guardrails_ctx = "\n".join(f"- {g}" for g in guardrails) if guardrails else "（无）"
+
+        storyboards: list[ChapterStoryboard] = []
+        for outline in outlines:
+            outline_ctx = (
+                f"章节：第{outline.chapter_index}章 {outline.title}\n"
+                f"职责：{outline.purpose}\n"
+                f"核心剧情：{outline.core_plot}\n"
+                f"不可逆变化：{outline.irreversible_change}\n"
+                f"必兑现线索：{'、'.join(outline.must_payoffs) if outline.must_payoffs else '（无）'}\n"
+                f"新承诺：{'、'.join(outline.new_promises) if outline.new_promises else '（无）'}"
+            )
+            user_prompt = f"""# 结构化设定摘要
+{setting_ctx}
+
+# 全书硬约束
+{guardrails_ctx}
+
+# 本章概要
+{outline_ctx}
+
+---
+请为本章生成 4-8 个场景分镜，且必须至少包含 1 个 daily/silence/narration 降密场景。
+场景必须覆盖主线推进并体现因果链。
+
+{STORYBOARD_SCHEMA}
+"""
+            messages = [
+                SystemMessage(content=STORYBOARD_SYSTEM_PROMPT),
+                HumanMessage(content=user_prompt),
+            ]
+            response = invoke_with_retry(model, messages, operation_name="generate_storyboard")
+            payload = extract_json(extract_response_text(response))
+            scene_items = payload.get("scenes", []) if isinstance(payload, dict) else []
+            scenes: list[StoryboardScene] = []
+            for idx, item in enumerate(scene_items, start=1):
+                if isinstance(item, dict):
+                    item.setdefault("scene_index", idx)
+                    scenes.append(StoryboardScene.model_validate(item))
+            if not scenes:
+                scenes = [
+                    StoryboardScene(
+                        scene_index=1,
+                        scene_type="plot_progress",
+                        title="主线推进",
+                        objective="推进本章核心冲突",
+                        conflict_type="价值冲突",
+                        causal_from="承接上章后果",
+                        causal_to="引出下一场景",
+                        info_gain=outline.core_plot[:80],
+                        style_notes="克制叙述，强调行动后果",
+                        expected_beats=["冲突启动", "关键抉择"],
+                    ),
+                    StoryboardScene(
+                        scene_index=2,
+                        scene_type="daily",
+                        title="降密场景",
+                        objective="提供节奏缓冲与心理过渡",
+                        conflict_type="内在张力",
+                        causal_from="冲突余波",
+                        causal_to="回到主线",
+                        info_gain="角色情绪与关系微调",
+                        style_notes="环境描写+心理描写",
+                        expected_beats=["静默观察", "情绪转折"],
+                    ),
+                ]
+            has_low_density = any(s.scene_type in {"daily", "silence", "narration"} for s in scenes)
+            if not has_low_density:
+                scenes.append(
+                    StoryboardScene(
+                        scene_index=len(scenes) + 1,
+                        scene_type="daily",
+                        title="降密补偿场景",
+                        objective="稀释剧情密度并增强生活质感",
+                        conflict_type="弱冲突",
+                        causal_from="高压冲突后的回落",
+                        causal_to="重返主线推进",
+                        info_gain="角色关系细微变化",
+                        style_notes="减少论述感，提升具象细节",
+                        expected_beats=["呼吸间隙", "微小承诺"],
+                    )
+                )
+
+            storyboards.append(
+                ChapterStoryboard(
+                    chapter_index=outline.chapter_index,
+                    title=outline.title,
+                    purpose=outline.purpose,
+                    irreversible_change=outline.irreversible_change,
+                    must_payoffs=outline.must_payoffs,
+                    scenes=scenes,
+                )
+            )
+
+        return {
+            "chapter_storyboards": storyboards,
+            "storyboard_approved": False,
+            "next_action": "persist_storyboards",
+        }
+
+    return generate_storyboards_node

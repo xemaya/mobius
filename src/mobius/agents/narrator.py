@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from mobius.agents.utils import extract_response_text, invoke_with_retry
 from mobius.engine.chaos_engine import ChaosEngine
-from mobius.models.chapter import Chapter, Scene
+from mobius.models.chapter import Chapter, ChapterStoryboard, Scene, SettingPack
 from mobius.models.character import CharacterAction
 from mobius.models.viewpoint import ViewpointFragment
 from mobius.prompts import load_prompt
@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 NARRATOR_SYSTEM_PROMPT = load_prompt("narrator_system")
 NARRATION_ONLY_PROMPT = load_prompt("narrator_narration_only")
 COMPILE_INSTRUCTIONS = load_prompt("narrator_compile_instructions")
+EXPAND_OUTLINE_SYSTEM_PROMPT = load_prompt("narrator_expand_outline_system")
+EXPAND_OUTLINE_INSTRUCTIONS = load_prompt("narrator_expand_outline_instructions")
 
 
 def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[str, Any]]:
@@ -57,9 +59,10 @@ def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[s
 
 地点：{scene.location or '未指定'}
 氛围：{scene.mood or '未指定'}
-导演指示：{scene.director_notes or '无'}{env_ctx}
+导演指示：{scene.director_notes or '无'}
+信息揭露目标：{scene.information_revelation or '无（本场景无需揭示新信息）'}{env_ctx}
 
-请撰写 200-400 字的环境描写或旁白叙述。"""
+请撰写 200-400 字的环境描写或旁白叙述。如果有信息揭露目标，必须将其自然融入叙事中。"""
 
         messages = [
             SystemMessage(content=NARRATION_ONLY_PROMPT),
@@ -87,6 +90,7 @@ def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[s
 def create_compile_chapter_node(
     model: BaseChatModel,
     chaos_engine: ChaosEngine | None = None,
+    chapter_min_words: int = 2500,
 ) -> Callable[[NovelState], dict[str, Any]]:
     """创建章节编译节点。
 
@@ -187,14 +191,19 @@ def create_compile_chapter_node(
 
 {COMPILE_INSTRUCTIONS}"""
 
-        messages = [
-            SystemMessage(content=NARRATOR_SYSTEM_PROMPT),
-            HumanMessage(content=user_prompt),
-        ]
-
         try:
-            # 获取最低字数要求（从 synopsis 中的写作风格要求推断，默认 2500）
-            min_words = 2500
+            # 获取最低字数要求（由 NovelConfig 注入，默认 2500）
+            min_words = max(int(chapter_min_words), 500)
+            messages = [
+                SystemMessage(content=NARRATOR_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=(
+                        f"{user_prompt}\n\n"
+                        f"# 强制字数要求\n"
+                        f"本章最终正文必须不少于 {min_words} 字。"
+                    )
+                ),
+            ]
 
             # 带字数不足重试的编译逻辑（最多重试 1 次）
             chapter_text = ""
@@ -269,3 +278,126 @@ def create_compile_chapter_node(
             return {"error": str(e), "next_action": "end"}
 
     return compile_chapter_node
+
+
+def create_expand_storyboard_chapter_node(
+    model: BaseChatModel,
+    chaos_engine: ChaosEngine | None = None,
+    chapter_min_words: int = 2500,
+) -> Callable[[NovelState], dict[str, Any]]:
+    """按章节分镜扩写正文（Phase4）。"""
+
+    def expand_storyboard_chapter_node(state: NovelState) -> dict[str, Any]:
+        storyboards: list[ChapterStoryboard] = state.get("chapter_storyboards", [])
+        setting_pack: SettingPack | None = state.get("setting_pack")
+        current_idx = state.get("current_chapter_index", 1)
+        total = state.get("total_chapters", len(storyboards) or 0)
+        guardrails = state.get("global_guardrails", [])
+        metadata = dict(state.get("metadata", {}))
+        rewrite_reason = metadata.pop("chapter_rewrite_reason", "")
+
+        if not storyboards:
+            return {"error": "缺少章节分镜", "next_action": "end"}
+        if current_idx > len(storyboards):
+            return {"next_action": "end"}
+
+        storyboard = storyboards[current_idx - 1]
+        min_words = max(int(chapter_min_words), 500)
+
+        guardrails_text = "\n".join(f"- {g}" for g in guardrails) if guardrails else "（无）"
+        setting_text = ""
+        if setting_pack:
+            setting_text = (
+                f"\n# 结构化设定锚点\n"
+                f"主旨：{setting_pack.theme}\n"
+                f"规则：{'；'.join(setting_pack.worldview_rules[:6]) if setting_pack.worldview_rules else '（无）'}\n"
+                f"关键时间线：{'；'.join(setting_pack.core_events_timeline[:8]) if setting_pack.core_events_timeline else '（无）'}\n"
+            )
+        rewrite_text = f"\n# 返工要求\n{rewrite_reason}\n" if rewrite_reason else ""
+        scenes_text = "\n".join(
+            (
+                f"- 场景{scene.scene_index} [{scene.scene_type}] {scene.title}\n"
+                f"  目标: {scene.objective}\n"
+                f"  冲突: {scene.conflict_type or '（无）'}\n"
+                f"  因果: {scene.causal_from or '（无）'} -> {scene.causal_to or '（无）'}\n"
+                f"  信息增量: {scene.info_gain or '（无）'}\n"
+                f"  风格: {scene.style_notes or '（无）'}\n"
+                f"  节拍: {'、'.join(scene.expected_beats) if scene.expected_beats else '（无）'}"
+            )
+            for scene in storyboard.scenes
+        )
+
+        user_prompt = f"""# 扩写任务
+你正在扩写第{storyboard.chapter_index}章（共{total}章）。
+
+# 本章分镜（必须严格兑现）
+标题：{storyboard.title}
+章节职责：{storyboard.purpose}
+不可逆变化：{storyboard.irreversible_change}
+必兑现线索：{'、'.join(storyboard.must_payoffs) if storyboard.must_payoffs else '（无）'}
+
+# 场景清单
+{scenes_text}
+{setting_text}
+
+# 全书硬约束
+{guardrails_text}
+{rewrite_text}
+---
+{EXPAND_OUTLINE_INSTRUCTIONS}
+
+# 强制字数要求
+本章最终正文必须不少于 {min_words} 字。"""
+
+        messages = [
+            SystemMessage(content=EXPAND_OUTLINE_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+
+        try:
+            chapter_text = ""
+            for attempt in range(2):
+                response = invoke_with_retry(model, messages, operation_name="expand_storyboard_chapter")
+                chapter_text = extract_response_text(response).strip()
+                if len(chapter_text) >= min_words:
+                    break
+                if attempt == 0:
+                    logger.warning(
+                        "扩写字数不足 (%d < %d)，追加扩写指令重试",
+                        len(chapter_text), min_words,
+                    )
+                    messages = [
+                        SystemMessage(content=EXPAND_OUTLINE_SYSTEM_PROMPT),
+                        HumanMessage(
+                            content=(
+                                f"当前稿件仅 {len(chapter_text)} 字，低于 {min_words} 字。"
+                                "请在保持主线事件不变的前提下扩写到目标字数。"
+                                f"\n\n原文：\n{chapter_text}"
+                            )
+                        ),
+                    ]
+
+            if chaos_engine:
+                chapter_text = chaos_engine.process_text_humanization(
+                    chapter_text,
+                    context=f"分镜扩写章节{storyboard.chapter_index}: {storyboard.title}",
+                )
+
+            chapter = Chapter(
+                chapter_index=storyboard.chapter_index,
+                title=storyboard.title,
+                content=chapter_text,
+                summary=storyboard.purpose,
+                word_count=len(chapter_text),
+            )
+            logger.info("分镜扩写完成: 第%d章「%s」, %d字", chapter.chapter_index, chapter.title, chapter.word_count)
+            return {
+                "chapters": [chapter],
+                "metadata": metadata,
+                "next_action": "storyboard_quality_gate",
+            }
+        except Exception as e:
+            logger.error("分镜扩写失败: %s", e)
+            return {"error": str(e), "next_action": "end"}
+
+    return expand_storyboard_chapter_node

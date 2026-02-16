@@ -4,6 +4,11 @@
     "chapter_index": <int, 章节序号>,
     "title": "<string, 章节标题>",
     "summary": "<string, 章节内容概要>",
+    "chapter_purpose": "<string, 本章在全书中的唯一职责>",
+    "theme_move": "<string, reinforce / question / invert / synthesize 之一>",
+    "required_payoffs": ["<string, 本章必须回收的旧线索>", "..."],
+    "new_promises": ["<string, 本章新埋设的承诺>", "..."],
+    "philosophical_beat": "<string, 本章明确提出的哲学冲突句>",
     "key_events": ["<string, 关键事件1>", "<string, 关键事件2>", ...],
     "participating_characters": ["<string, 角色名1>", "<string, 角色名2>", ...],
     "emotional_tone": "<string, 情感基调>",
@@ -17,6 +22,11 @@
             "scene_type": "<string, 必须是 single_action / interaction / narration / silence / daily 之一>",
             "mood": "<string, 氛围>",
             "objectives": ["<string, 剧情目标>", ...],
+            "information_revelation": "<string, 本场景必须向读者交代的背景信息或逻辑解释。例如：'通过对话揭示陆沉之所以被格式化，是因为他产生了自我毁灭倾向'。如果本场景无需揭示新信息可留空>",
+            "causal_from": "<string, 本场景由上一场景什么因果触发>",
+            "causal_to": "<string, 本场景将导致下一场景什么后果>",
+            "thesis_signal": "<string, support / challenge / suspend 之一>",
+            "thread_ops": ["<string, opening / deepening / payoff / none>", "..."],
             "director_notes": "<string, 导演指示>"
         }
     ]
@@ -30,4 +40,6 @@
    - "narration": 旁白/环境描写
    - "silence": 沉默场景——无对话，纯环境描写+角色内心流动，300-500字，作为呼吸间隙
    - "daily": 日常场景——琐碎生活细节（通勤、买饭、洗碗），不推进主线，展示角色的普通一面
-3. 【节奏硬性要求】每章至少包含1个 "silence" 或 "daily" 类型的场景，用于给读者喘息。
+3. 【节奏弹性控制】仅在连续的高强度冲突之后，才需要插入 "silence" 或 "daily" 场景作为缓冲。如果本章主要是铺垫或解谜，不需要强制插入日常场景。
+4. 【信息流管理】每个场景的 information_revelation 字段是信息管理的核心工具。确保每章至少有1-2个场景携带新的信息增量（世界观细节、角色背景、技术原理等），让读者层层剥茧而非原地踏步。
+5. 【整体性约束】chapter_purpose/theme_move/philosophical_beat 必须完整且具体。required_payoffs/new_promises 不能为空数组（至少一项），并与章节事件存在因果对应。

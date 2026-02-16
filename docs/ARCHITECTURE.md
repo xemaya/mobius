@@ -1,3 +1,340 @@
+# Mobius 架构文档（v3.0）
+
+> 本文档描述当前主流程架构（v3.0）。  
+> v2.x 的双循环正文直生成为历史设计，不再作为 CLI 主入口。
+
+---
+
+## 1. 版本定位
+
+v3.0 的核心目标是解决长篇小说生成中的两类问题：
+
+- 主线停滞：章节之间重复迭代，不产生实质推进
+- 上下文失控：从粗概要直接扩 5000 字，容易写飞或违背设定
+
+为此，Mobius 采用 **三层创作架构**（工程上拆成四个顺序阶段）：
+
+1. 章节概要（Outline）
+2. 设定集反向补完（Setting Pack）
+3. 章节分镜（Storyboard）
+4. 分镜驱动扩写（Expand）
+
+并在前 3 个阶段加入人工审批闸门。
+
+---
+
+## 2. 三层主流程
+
+### 2.1 流程图
+
+```mermaid
+flowchart TD
+  inputYaml[PresetYaml] --> outlineGen[Layer1B_Outline]
+  outlineGen --> approveOutline[ApproveOutline]
+  approveOutline --> settingPack[Layer1A_SettingPack_Backfill]
+  settingPack --> approveSetting[ApproveSetting]
+  approveOutline --> storyboardGen[Layer2_Storyboard]
+  approveSetting --> storyboardGen
+  storyboardGen --> approveStoryboard[ApproveStoryboard]
+  approveStoryboard --> expandGen[Layer3_ExpandByStoryboard]
+  expandGen --> chapterGate[ChapterQualityGate]
+  chapterGate --> chaptersOut[ChaptersOutput]
+  chaptersOut --> fullNovel[FullNovelMd]
+```
+
+### 2.2 每层职责
+
+- `Layer1B Outline`：先按章定义主线职责、不可逆变化、线索回收与新承诺
+- `Layer1A SettingPack`：再基于已确认概要反向补完设定（人物出场时机/世界规则深描/结构化时间线）
+- `Layer2 Storyboard`：把每章概要拆成 4-8 个场景，并强制加入降密场景
+- `Layer3 Expand`：严格按分镜扩写正文，不允许“概要直扩”
+
+---
+
+## 3. 阶段闸门与约束
+
+### 3.1 人工审批闸门
+
+扩写前必须满足三个审批文件全部存在且 `approved=true`：
+
+- `setting_approval.json`
+- `outline_approval.json`
+- `storyboard_approval.json`
+
+缺任何一个都阻断 `expand`。
+
+### 3.2 分镜约束（Layer2）
+
+每章分镜要求：
+
+- 场景数 4-8
+- 至少 2 个 `plot_progress` 场景
+- 至少 1 个降密场景：`daily` / `silence` / `narration`
+- 场景必须有因果链（`causal_from -> causal_to`）
+
+### 3.3 扩写质量闸门（Layer3）
+
+每章扩写完成后执行质量检查：
+
+- 不可逆推进是否命中
+- 线索回收是否命中（至少部分）
+- 是否触发硬约束冲突（规则匹配）
+- 场景覆盖率是否达标（当前阈值 50%）
+- 与 `SettingPack` 设定锚点关联是否过弱
+
+失败策略：
+
+- 单章最多重写 1 次
+- 仍失败则降级放行并记录 warning（不中断全流程）
+
+---
+
+## 4. 核心数据模型
+
+### 4.1 新增模型（v3.0）
+
+文件：`src/mobius/models/chapter.py`
+
+- `SettingEntity`
+  - `name`, `category`, `description`
+  - `constraints`, `unresolved_questions`
+- `SettingCharacterProfile`
+  - `name`, `role`, `personality_traits`, `inner_thinking_habits`
+  - `outfit_style`, `first_appearance_chapter`, `first_appearance_moment`
+  - `first_appearance_constraints`, `arc_seed`
+- `SettingRule`
+  - `rule_id`, `statement`, `rationale`, `forbidden_cases`
+- `TimelineEvent`
+  - `event_id`, `title`, `description`, `chapter_hint`, `dependencies`, `irreversible_impact`
+- `SettingPack`
+  - `title`, `theme`, `theme_longform`, `worldview_longform`
+  - `worldview_rules`, `detailed_rules`
+  - `core_events_timeline`, `timeline_events`
+  - `characters`, `organizations`, `items`, `entities`
+  - `missing_items`, `author_notes`
+- `StoryboardScene`
+  - `scene_index`, `scene_type`, `title`, `objective`
+  - `conflict_type`, `location`, `participating_characters`
+  - `causal_from`, `causal_to`, `info_gain`, `style_notes`, `expected_beats`
+- `ChapterStoryboard`
+  - `chapter_index`, `title`, `purpose`
+  - `irreversible_change`, `must_payoffs`
+  - `scenes`
+
+### 4.2 状态字段扩展（NovelState）
+
+文件：`src/mobius/state/novel_state.py`
+
+新增字段：
+
+- `setting_pack: SettingPack | None`
+- `setting_approved: bool`
+- `chapter_outlines: list[ChapterOutline]`
+- `outline_approved: bool`
+- `chapter_storyboards: list[ChapterStoryboard]`
+- `storyboard_approved: bool`
+- `global_guardrails: list[str]`
+
+---
+
+## 5. 图编排与节点
+
+文件：`src/mobius/graph/novel_graph.py`
+
+### 5.1 图构建器（v3.0）
+
+- `build_setting_pack_graph` / `compile_setting_pack_graph`
+- `build_outline_graph` / `compile_outline_graph`
+- `build_storyboard_graph` / `compile_storyboard_graph`
+- `build_expand_graph` / `compile_expand_graph`
+
+### 5.2 关键节点
+
+- 设定层
+  - `generate_setting_pack`
+  - `persist_setting_pack`
+- 概要层
+  - `blueprint_refresh`
+  - `generate_outlines`
+  - `persist_outlines`
+- 分镜层
+  - `generate_storyboards`
+  - `persist_storyboards`
+- 扩写层
+  - `expand_storyboard_chapter`
+  - `storyboard_quality_gate`
+  - `persist_expand_chapter`
+
+### 5.3 路由动作
+
+文件：`src/mobius/graph/routing.py`
+
+`VALID_ACTIONS` 已包含 v3.0 新动作：
+
+- `generate_setting_pack`, `persist_setting_pack`
+- `generate_outlines`, `persist_outlines`
+- `generate_storyboards`, `persist_storyboards`
+- `expand_storyboard_chapter`, `storyboard_quality_gate`, `persist_expand_chapter`
+
+---
+
+## 6. Agent 职责映射
+
+### 6.1 Director（规划侧）
+
+文件：`src/mobius/agents/director.py`
+
+- `create_generate_setting_pack_node`
+- `create_generate_outlines_node`（`setting_pack` 可选）
+- `create_generate_storyboards_node`
+
+### 6.2 Narrator（扩写侧）
+
+文件：`src/mobius/agents/narrator.py`
+
+- `create_expand_storyboard_chapter_node`
+  - 输入：`ChapterStoryboard + SettingPack 摘要 + guardrails`
+  - 输出：单章正文（字数下限受 `chapter_min_words` 控制）
+
+---
+
+## 7. 输出目录规范（v3.0）
+
+由 `OutputManager` 管理，文件：`src/mobius/output/manager.py`
+
+```text
+output/<novel_name>/
+├── setting_pack/
+│   ├── setting_pack.json
+│   ├── setting_pack.md
+│   ├── theme.md
+│   ├── worldview.md
+│   ├── timeline.md
+│   ├── characters.md
+│   ├── organizations.md
+│   └── items.md
+├── outlines/
+│   ├── chapter_001_outline.json
+│   └── chapter_001.md
+├── full_outline.md
+├── storyboards/
+│   ├── chapter_001_storyboard.json
+│   └── chapter_001.md
+├── full_storyboard.md
+├── chapters/
+│   └── chapter_001.md
+├── full_novel.md
+├── setting_approval.json
+├── outline_approval.json
+├── storyboard_approval.json
+└── metadata.json
+```
+
+保留历史目录（事件/评审/记忆/状态）以兼容已有工具链：
+
+- `events/`, `reviews/`, `memory/`, `state/`
+
+---
+
+## 8. CLI 命令（v3.0）
+
+入口文件：`src/mobius/main.py`
+
+### 8.1 主命令集
+
+- `mobius outline <setting.(yaml|md)> -o <output> [--end-chapter N]`
+- `mobius approve-outline -o <output>`
+- `mobius setting-pack <setting.(yaml|md)> -o <output>`
+- `mobius approve-setting -o <output>`
+- `mobius storyboard <setting.(yaml|md)> -o <output> [--from-outline <dir>]`
+- `mobius approve-storyboard -o <output>`
+- `mobius expand <setting.(yaml|md)> -o <output> [--from-storyboard <dir>] [--start-chapter N] [--end-chapter N]`
+
+说明：当输入为 `.md` 启动文档时，CLI 会自动在 `output/<name>/bootstrap/` 生成或复用 `*.preset.yaml`，再驱动后续流程。
+
+### 8.2 Dry-run 模式
+
+用于离线链路验证（不依赖在线模型）：
+
+- `setting-pack --dry-run`
+- `outline --dry-run`
+- `storyboard --dry-run`
+- `expand --dry-run`
+
+说明：`--dry-run` 产物用于流程调试，不代表最终文学质量。
+
+---
+
+## 9. 提示词体系（v3.0）
+
+目录：`src/mobius/prompts/`
+
+新增提示词：
+
+- `director_setting_pack_system.txt`
+- `director_setting_pack_schema.txt`
+- `director_storyboard_system.txt`
+- `director_storyboard_schema.txt`
+
+扩写提示词沿用分镜扩写路径：
+
+- `narrator_expand_outline_system.txt`（当前内容已用于分镜扩写节点）
+- `narrator_expand_outline_instructions.txt`
+
+> 后续建议重命名为 `narrator_expand_storyboard_*`，以避免语义歧义。
+
+---
+
+## 10. 失败恢复与运行策略
+
+### 10.1 网络波动
+
+在线模型可能出现：
+
+- `Server disconnected without sending a response`
+
+推荐恢复方式：
+
+- 缩小批次（例如 `outline --end-chapter 3`）
+- 用 `expand --start-chapter N --end-chapter M` 分段续跑
+
+### 10.2 断点续跑
+
+v3.0 扩写阶段天然支持按章节区间续跑（基于 `start/end chapter`），避免整批重跑。
+
+---
+
+## 11. 与 v2.x 的主要差异
+
+- 从“正文中心”改为“资产中心”
+- 从两阶段（概要->扩写）改为三层（设定->概要->分镜->扩写）
+- 新增三重人工审批闸门
+- 扩写输入从概要变为分镜，降低写飞风险
+- 质量闸门从轻量文本规则升级为“推进+设定+覆盖”复合检查
+- CLI 主入口切换到 v3.0 命令集
+
+---
+
+## 12. 后续演进建议（v3.1+）
+
+- 将扩写提示词命名统一到 `storyboard` 语义
+- 引入分镜覆盖率的语义匹配（embedding）替代关键词命中
+- 对质量闸门失败原因做结构化日志落盘（便于评估）
+- 增加 `assemble` 命令：显式按 `chapters/` 重建 `full_novel.md`
+
+---
+
+## 13. 参考实现入口
+
+- CLI：`src/mobius/main.py`
+- 图编排：`src/mobius/graph/novel_graph.py`
+- 路由：`src/mobius/graph/routing.py`
+- Director：`src/mobius/agents/director.py`
+- Narrator：`src/mobius/agents/narrator.py`
+- OutputManager：`src/mobius/output/manager.py`
+- State：`src/mobius/state/novel_state.py`
+- Models：`src/mobius/models/chapter.py`
+
 # Mobius — AI 小说创作多智能体系统
 
 > **版本**: v2.1（失控型叙事引擎）🔥
@@ -210,7 +547,7 @@ pyproject.toml:
 
 ## 5. 双循环流水线
 
-Mobius 采用**双循环架构**，将"世界模拟"和"叙事呈现"解耦：
+Mobius 采用**双循环架构**，将"世界模拟"和"叙事呈现"解耦，并新增“全书架构层”保证整体性：
 
 ```
                     ┌────────────────────────────────────────────────┐
@@ -219,23 +556,23 @@ Mobius 采用**双循环架构**，将"世界模拟"和"叙事呈现"解耦：
                     │  env_update ──► desire_tick ──► conflict_detect │
                     │       ▲                              │         │
                     │       │                              ▼         │
-                    │  distill_memory ◄── ... ◄── observer_mark      │
+                    │  clue_ledger ◄── ... ◄── observer_mark         │
                     │       │                              │         │
                     └───────┼──────────────────────────────┼─────────┘
                             │                              │
                     ┌───────┼──────────────────────────────┼─────────┐
                     │       │   Outer Loop: Narrative       │         │
                     │       │                              ▼         │
-                    │  distill_memory    plan_chapter ◄────┘         │
+                    │  distill_memory   blueprint_refresh ◄───┘      │
                     │       ▲                 │                      │
                     │       │                 ▼                      │
-                    │  review_chapter    direct_scene                │
+                    │  review_chapter     plan_chapter               │
                     │       ▲                 │                      │
                     │       │                 ▼                      │
-                    │  (viewpoints)    scene_execute                 │
+                    │  (viewpoints)   chapter_contract               │
                     │       ▲          (action/interact)             │
                     │       │                 │                      │
-                    │  compile_chapter ◄──────┘                      │
+                    │  compile_chapter ◄── direct_scene ◄────────────┘
                     │                                                │
                     └────────────────────────────────────────────────┘
 ```
@@ -250,6 +587,7 @@ Mobius 采用**双循环架构**，将"世界模拟"和"叙事呈现"解耦：
 | 2 | `desire_tick` | 每个角色根据欲望优先级和资源状况提出行动提案 (DesireProposal) |
 | 3 | `conflict_detect` | 冲突引擎检测欲望碰撞、资源争夺、恐惧触发，生成 WorldEvent |
 | 4 | `observer_mark` | 世界观察者用 LLM 评估每个事件的叙事价值，选出高价值事件 |
+| 5 | `blueprint_refresh` | 建立/刷新全书蓝图（主命题、反命题、综合、章节职责、角色弧线） |
 
 ### 5.2 外循环：叙事呈现
 
@@ -257,17 +595,36 @@ Mobius 采用**双循环架构**，将"世界模拟"和"叙事呈现"解耦：
 
 | 步骤 | 节点 | 职责 |
 |------|------|------|
-| 5 | `plan_chapter` | 编排者从 narrative_candidates + desire_proposals 中组织本章素材 |
-| 6 | `direct_scene` | 从场景队列取出下一个场景，根据类型路由 |
-| 7 | `character_action` / `character_interact` | 角色执行双阶段生成（内心独白 → 外显行动） |
-| 8 | `update_state` | 应用信念/资源/情感/环境变化，检查触发条件 |
-| 9 | `check_triggers` → `handle_trigger` | 处理触发事件 |
-| 10 | `compile_chapter` | 叙事 Agent 融合外显行为 + 潜台词 + 支线视角 → 小说正文 |
-| 11 | `secondary_viewpoints` | 支线观察者生成非主角视角片段 |
-| 12 | `review_chapter` | 评审 Agent 评估主题/张力/逻辑，输出 ChapterReview |
-| 13 | `distill_memory` | 记忆蒸馏 Agent 将旧记忆压缩为结构化摘要 |
+| 6 | `plan_chapter` | 生成章节规划（含 chapter_purpose/theme_move/payoff/promise） |
+| 7 | `chapter_contract` | 章节合同校验，不通过则回退重规划 |
+| 8 | `direct_scene` | 从场景队列取出下一个场景，根据类型路由 |
+| 9 | `character_action` / `character_interact` | 角色执行双阶段生成（内心独白 → 外显行动） |
+| 10 | `update_state` | 应用信念/资源/情感/环境变化，检查触发条件 |
+| 11 | `check_triggers` → `handle_trigger` | 处理触发事件 |
+| 12 | `compile_chapter` | 叙事 Agent 融合外显行为 + 潜台词 + 支线视角 → 小说正文 |
+| 13 | `secondary_viewpoints` | 支线观察者生成非主角视角片段 |
+| 14 | `review_chapter` | 评审 Agent 输出主题/张力/结构一致性指标 |
+| 15 | `distill_memory` | 记忆蒸馏 Agent 将旧记忆压缩为结构化摘要 |
+| 16 | `clue_ledger` | 线索账本结算（开线/回收/逾期）并路由下一章或结束 |
 
 循环回到步骤 1 开始下一章，直到所有章节完成。
+
+### 5.3 三层导演（Series Architect / Chapter Contract / Scene Orchestrator）
+
+为避免“单场景好看但全书松散”，导演被拆为三层协作：
+
+1. **Series Architect（全书架构师）**  
+   节点：`blueprint_refresh`  
+   产出：`NovelBlueprint`（主命题/反命题/综合立场、章节职责、角色哲学弧线）
+
+2. **Chapter Contract Planner（章节合同层）**  
+   节点：`plan_chapter` + `chapter_contract`  
+   产出：`ChapterPlan` + `ChapterContract`（`chapter_purpose`、`theme_move`、`required_payoffs`、`new_promises`、`philosophical_beat`）  
+   机制：合同校验失败时回退 `plan_chapter` 重规划，保证结构约束先于场景执行
+
+3. **Scene Orchestrator（场景编排层）**  
+   节点：`direct_scene`  
+   执行：逐场景路由与调度，场景级字段明确因果与命题信号（`causal_from`、`causal_to`、`thesis_signal`、`thread_ops`）
 
 ---
 
@@ -388,11 +745,17 @@ class SecondaryViewpoint:
 class ChapterReview:
     theme_alignment: float     # 主题契合度 0-1
     theme_drift_notes: str     # 主题偏移备注
+    theme_progression: float   # 主题推进度
+    theme_progression_notes: str
     tension_score: float       # 张力评分 0-1
     pacing_notes: str          # 节奏备注
     logic_issues: list[str]    # 逻辑漏洞
     character_voice_issues: list  # 角色声音一致性问题
     unresolved_threads: list   # 未回收的伏笔
+    thread_recovery_rate: float
+    unrecovered_threads: list[str]
+    chapter_necessity: float
+    chapter_necessity_notes: str
     suggestions_for_next: str  # 对下一章的建议
 ```
 
@@ -473,6 +836,7 @@ class StructuredMemorySummary:
 
 ```
 models/
+├── architecture.py   # NovelBlueprint, ChapterContract, ThreadLedgerItem
 ├── belief.py         # Belief（三层信念）
 ├── chapter.py        # Scene, ChapterPlan, Chapter
 ├── character.py      # CharacterProfile, CharacterDynamicState, CharacterAction
@@ -480,7 +844,7 @@ models/
 ├── desire.py         # Desire, Fear, DesireProposal
 ├── environment.py    # EnvironmentVariable, EnvironmentBehaviorRule, EnvironmentState
 ├── resource.py       # ResourcePool, ResourceCost, ResourceEvent
-├── review.py         # WorldEvent, ChapterReview, StructuredMemorySummary
+├── review.py         # WorldEvent, ChapterReview(含结构指标), StructuredMemorySummary
 ├── triggers.py       # TriggerRule, TriggeredEvent
 ├── viewpoint.py      # SecondaryViewpoint, ViewpointFragment
 └── worldview.py      # WorldView, PlotOutline
@@ -519,14 +883,17 @@ CharacterAction (角色每次行动的输出)
 
 | Agent | 文件 | 职责 | 模型 |
 |-------|------|------|------|
-| **Director / Orchestrator** | `agents/director.py` | 编排章节，执行张弛算法和角色失误注入 | Gemini |
+| **Series Architect** | `agents/director.py` | 生成/刷新全书蓝图（命题、章节职责、角色哲学弧线） | Gemini |
+| **Chapter Contract Planner** | `agents/director.py` | 生成章节计划并执行合同校验（失败回退重规划） | Gemini |
+| **Scene Orchestrator** | `agents/director.py` | 按场景执行路由，维护叙事因果链 | Gemini |
 | **Character (N个)** | `agents/character.py` | 双阶段生成（内心独白 + 外显行动）、欲望提案 | Gemini + M2-her |
 | **Narrator** | `agents/narrator.py` | 融合外显行为 + 潜台词 + 支线视角 → 小说正文 | Gemini |
 | **Style Governor** | `engine/style_governor.py` | 文风降温、漂亮话删减、普通句强制（后处理层） | Gemini |
 | **World Observer** | `agents/observer.py` | 评估世界事件的叙事价值，裁剪呈现 | Gemini |
 | **Secondary Viewpoints** | `agents/observer.py` | 从非主角视角生成叙事片段 | Gemini |
-| **Reviewer** | `agents/reviewer.py` | 主题守护 + 张力控制 + 自我批评 | Gemini (低温) |
+| **Reviewer (Structural Reviewer)** | `agents/reviewer.py` | 主题守护 + 张力控制 + 结构一致性审查（主题推进/回收率/章节必要性） | Gemini (低温) |
 | **Memory Distiller** | `agents/memory.py` | 结构化记忆蒸馏 | Gemini |
+| **Clue Ledger** | `graph/novel_graph.py` | 章间线索结算（开线/回收/逾期）并生成下一章强约束上下文 | 本地逻辑 |
 
 ### Agent 间信息隔离
 
@@ -595,7 +962,7 @@ class NovelState(TypedDict, total=False):
     worldview, plot_outline, character_profiles, theme
 
     # 章节管理
-    total_chapters, current_chapter_index, chapter_plan, chapters
+    total_chapters, current_chapter_index, chapter_plan, chapter_contract, chapters
 
     # 场景管理
     scene_queue, current_scene
@@ -622,8 +989,16 @@ class NovelState(TypedDict, total=False):
     # 评审
     tension_curve, chapter_reviews, memory_summaries
 
+    # 信息流与全书架构
+    revealed_information: list[str]
+    novel_blueprint: NovelBlueprint | None
+    open_threads: list[str]
+    payoff_ledger: list[ThreadLedgerItem]
+    theme_progress_log: list[str]
+
     # 控制
     next_action: str
+    metadata: dict
 ```
 
 ### 10.2 角色状态更新流
@@ -657,6 +1032,8 @@ check_triggers()           → 检查触发条件（支持 belief:/fear:/resourc
 ## 11. YAML 设定集规范
 
 Mobius 通过 YAML 文件接收完整的小说设定，包括：
+
+> v3.0 支持直接传入 Markdown 启动文档；系统会先自动翻译为 YAML（`output/.../bootstrap/*.preset.yaml`），再进入同一套加载逻辑。
 
 ```yaml
 # 顶级结构
@@ -733,14 +1110,15 @@ mobius/
     ├── main.py                       # CLI 入口
     ├── config/
     │   └── settings.py               # ModelConfig, NovelConfig
-    ├── models/                       # Pydantic 数据模型 (11 个文件)
+    ├── models/                       # Pydantic 数据模型 (12 个文件)
+    │   ├── architecture.py           # 全书蓝图/章节合同/线索账本
     │   ├── belief.py                 # Belief（三层信念）
     │   ├── chapter.py                # Scene, ChapterPlan, Chapter
     │   ├── character.py              # CharacterProfile/DynamicState/Action
     │   ├── desire.py                 # Desire, Fear, DesireProposal
     │   ├── environment.py            # 环境变量、行为修饰
     │   ├── resource.py               # ResourcePool, ResourceCost
-    │   ├── review.py                 # WorldEvent, ChapterReview
+    │   ├── review.py                 # WorldEvent, ChapterReview(含结构指标)
     │   ├── triggers.py               # TriggerRule, TriggeredEvent
     │   ├── viewpoint.py              # SecondaryViewpoint, ViewpointFragment
     │   ├── worldview.py              # WorldView, PlotOutline
@@ -771,7 +1149,7 @@ mobius/
     │   └── conflict_engine.py        # 冲突检测引擎
     ├── graph/                        # LangGraph 图定义 (2 个文件)
     │   ├── novel_graph.py            # 双循环 StateGraph + YAML 加载
-    │   └── routing.py                # 条件路由（17 个合法节点）
+    │   └── routing.py                # 条件路由（含 blueprint_refresh/chapter_contract/clue_ledger）
     └── llm/                          # LLM 封装层 (1 个文件)
         └── minimax.py                # ChatMiniMax (M2-her 角色扮演)
 ```

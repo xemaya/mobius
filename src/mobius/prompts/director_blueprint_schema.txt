@@ -1,0 +1,12 @@
+请严格输出：
+```json
+{
+  "thesis": "<主命题>",
+  "antithesis": "<反命题>",
+  "synthesis": "<综合立场>",
+  "chapter_missions": ["<第1章职责>", "<第2章职责>"],
+  "character_arcs": {
+    "<角色名>": "<角色哲学弧线>"
+  }
+}
+```

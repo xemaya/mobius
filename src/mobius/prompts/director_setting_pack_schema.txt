@@ -1,0 +1,77 @@
+请严格输出以下 JSON：
+```json
+{
+  "title": "小说标题",
+  "theme": "主旨命题",
+  "theme_longform": "主旨深描（建议1000字以上）",
+  "worldview_longform": "世界观深描（建议1000字以上）",
+  "worldview_rules": ["规则1", "规则2"],
+  "detailed_rules": [
+    {
+      "rule_id": "R1",
+      "statement": "规则描述",
+      "rationale": "成立原因",
+      "forbidden_cases": ["违规案例1", "违规案例2"]
+    }
+  ],
+  "core_events_timeline": ["事件1", "事件2", "事件3"],
+  "timeline_events": [
+    {
+      "event_id": "E1",
+      "title": "事件标题",
+      "description": "事件描述",
+      "chapter_hint": 1,
+      "dependencies": [],
+      "irreversible_impact": "不可逆影响"
+    }
+  ],
+  "characters": [
+    {
+      "name": "角色名",
+      "role": "主角",
+      "personality_traits": ["理性", "克制"],
+      "inner_thinking_habits": ["先算后动", "反复自证"],
+      "outfit_style": "衣着描述",
+      "first_appearance_chapter": 1,
+      "first_appearance_moment": "首次出场时机描述",
+      "first_appearance_constraints": ["出场前铺垫1"],
+      "arc_seed": "角色弧线种子"
+    }
+  ],
+  "organizations": [
+    {
+      "name": "组织名",
+      "category": "organization",
+      "description": "组织描述",
+      "constraints": ["约束1"],
+      "unresolved_questions": []
+    }
+  ],
+  "items": [
+    {
+      "name": "物件名",
+      "category": "artifact",
+      "description": "物件描述",
+      "constraints": ["约束1"],
+      "unresolved_questions": []
+    }
+  ],
+  "entities": [
+    {
+      "name": "实体名",
+      "category": "character",
+      "description": "实体描述",
+      "constraints": ["约束1", "约束2"],
+      "unresolved_questions": ["待补完问题1"]
+    }
+  ],
+  "missing_items": ["缺失项补完建议1", "缺失项补完建议2"],
+  "author_notes": "补充备注"
+}
+```
+
+约束：
+1. `core_events_timeline` 至少8条。
+2. `timeline_events` 至少12条，覆盖前中后期关键事件。
+3. `characters` 至少包含所有主角，且每个角色必须给出 `first_appearance_chapter`。
+4. 任何不确定信息必须进入 `missing_items` 或 `unresolved_questions`。

@@ -7,7 +7,15 @@ from typing import Annotated, Any
 
 from typing_extensions import TypedDict
 
-from mobius.models.chapter import Chapter, ChapterPlan, Scene
+from mobius.models.chapter import (
+    Chapter,
+    ChapterOutline,
+    ChapterPlan,
+    ChapterStoryboard,
+    Scene,
+    SettingPack,
+)
+from mobius.models.architecture import ChapterContract, NovelBlueprint, ThreadLedgerItem
 from mobius.models.character import CharacterAction, CharacterDynamicState, CharacterProfile
 from mobius.models.desire import DesireProposal
 from mobius.models.environment import EnvironmentState
@@ -33,7 +41,15 @@ class NovelState(TypedDict, total=False):
     total_chapters: int
     current_chapter_index: int
     chapter_plan: ChapterPlan | None
+    chapter_contract: ChapterContract | None
     chapters: Annotated[list[Chapter], add]
+    chapter_outlines: list[ChapterOutline]
+    outline_approved: bool
+    global_guardrails: list[str]
+    setting_pack: SettingPack | None
+    setting_approved: bool
+    chapter_storyboards: list[ChapterStoryboard]
+    storyboard_approved: bool
 
     # ── 场景管理 ──
     scene_queue: list[Scene]
@@ -68,6 +84,13 @@ class NovelState(TypedDict, total=False):
 
     # ── 记忆蒸馏 ──
     memory_summaries: list[StructuredMemorySummary]
+
+    # ── 信息流管理（剧情进度跟踪）──
+    revealed_information: Annotated[list[str], add]  # 已向读者揭露的关键信息/秘密
+    novel_blueprint: NovelBlueprint | None
+    open_threads: list[str]
+    payoff_ledger: list[ThreadLedgerItem]
+    theme_progress_log: list[str]
 
     # ── 控制流 ──
     next_action: str  # 路由控制

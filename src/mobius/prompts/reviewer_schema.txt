@@ -3,11 +3,17 @@
 {
     "theme_alignment": 0.8,
     "theme_drift_notes": "主题偏移备注（如有）",
+    "theme_progression": 0.7,
+    "theme_progression_notes": "主题推进说明",
     "tension_score": 0.7,
     "pacing_notes": "节奏备注",
     "logic_issues": ["逻辑问题1", "逻辑问题2"],
     "character_voice_issues": ["角色声音问题1"],
     "unresolved_threads": ["未解决线索1"],
+    "thread_recovery_rate": 0.5,
+    "unrecovered_threads": ["应回收但未回收线索1"],
+    "chapter_necessity": 0.9,
+    "chapter_necessity_notes": "章节必要性说明",
     "suggestions_for_next": "对下一章的建议"
 }
 ```

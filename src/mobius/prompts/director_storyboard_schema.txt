@@ -1,0 +1,26 @@
+请严格输出以下 JSON：
+```json
+{
+  "scenes": [
+    {
+      "scene_index": 1,
+      "scene_type": "plot_progress",
+      "title": "场景标题",
+      "objective": "场景目标",
+      "conflict_type": "冲突类型",
+      "location": "地点",
+      "participating_characters": ["角色A", "角色B"],
+      "causal_from": "因果起点",
+      "causal_to": "因果终点",
+      "info_gain": "信息增量",
+      "style_notes": "风格注记",
+      "expected_beats": ["节拍1", "节拍2"]
+    }
+  ]
+}
+```
+
+约束：
+1. scenes 数量 4-8。
+2. 至少 1 个 scene_type 属于 daily/silence/narration。
+3. 必须包含至少 2 个 `plot_progress` 场景。

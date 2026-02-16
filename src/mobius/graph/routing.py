@@ -14,9 +14,17 @@ VALID_ACTIONS = {
     "desire_tick",
     "conflict_detect",
     "observer_mark",
+    "blueprint_refresh",
+    "generate_setting_pack",
+    "persist_setting_pack",
+    "generate_outlines",
+    "persist_outlines",
+    "generate_storyboards",
+    "persist_storyboards",
     "secondary_viewpoints",
     # 外循环（叙事呈现）
     "plan_chapter",
+    "chapter_contract",
     "direct_scene",
     "character_action",
     "character_interact",
@@ -31,6 +39,10 @@ VALID_ACTIONS = {
     "persist_chapter",
     "persist_review",
     "persist_memory",
+    "clue_ledger",
+    "expand_storyboard_chapter",
+    "storyboard_quality_gate",
+    "persist_expand_chapter",
     # 终止
     "end",
 }

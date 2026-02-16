@@ -102,9 +102,11 @@ def create_review_chapter_node(
             reviews.append(review)
 
             logger.info(
-                "章节评审完成: 主题契合度=%.2f, 张力=%.2f, 逻辑问题=%d个",
+                "章节评审完成: 主题契合度=%.2f, 张力=%.2f, 主题推进=%.2f, 回收率=%.2f, 逻辑问题=%d个",
                 review.theme_alignment,
                 review.tension_score,
+                review.theme_progression,
+                review.thread_recovery_rate,
                 len(review.logic_issues),
             )
 

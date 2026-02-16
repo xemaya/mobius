@@ -205,11 +205,17 @@ output/<novel_name>/
   "review": {
     "theme_alignment": 0.85,
     "theme_drift_notes": "",
+    "theme_progression": 0.72,
+    "theme_progression_notes": "本章将命题从控制即保护推进到控制即伤害",
     "tension_score": 0.7,
     "pacing_notes": "节奏良好",
     "logic_issues": [],
     "character_voice_issues": [],
     "unresolved_threads": ["线索A"],
+    "thread_recovery_rate": 0.5,
+    "unrecovered_threads": ["线索B"],
+    "chapter_necessity": 0.92,
+    "chapter_necessity_notes": "本章承担核心反转，不能删除",
     "suggestions_for_next": "建议..."
   }
 }
@@ -325,11 +331,15 @@ START
 │  conflict_detect   从欲望碰撞中检测冲突，生成世界事件      │
 │  ↓                                                       │
 │  observer_mark     观察者评估事件叙事价值，选择高价值事件   │
+│  ↓                                                       │
+│  blueprint_refresh 建立/刷新全书蓝图（主命题与章节职责）    │
 └──────────────────────────────────────────────────────────┘
   │
   ▼
 ┌─────────────────── 外循环（叙事呈现） ───────────────────┐
-│  plan_chapter      导演从素材中编排章节规划                │
+│  plan_chapter      导演从素材中编排章节规划（含主题推进）   │
+│  ↓                                                       │
+│  chapter_contract  章节合同校验（不过关则回退重规划）       │
 │  ↓                                                       │
 │  direct_scene      调度下一个场景                          │
 │  ↓                                                       │
@@ -348,13 +358,15 @@ START
 │  ↓                                                       │
 │  [secondary_viewpoints]  支线视角片段（可选）              │
 │  ↓                                                       │
-│  review_chapter    评审：主题守护 + 张力控制 + 自我批评     │
+│  review_chapter    评审：主题 + 张力 + 结构一致性          │
 │  ↓                                                       │
 │  persist_review    ★ 写入评审记录                          │
 │  ↓                                                       │
 │  distill_memory    记忆蒸馏：压缩长期记忆                  │
 │  ↓                                                       │
-│  persist_memory    ★ 写入记忆摘要，路由到下一章或结束       │
+│  persist_memory    ★ 写入记忆摘要                          │
+│  ↓                                                       │
+│  clue_ledger       线索账本结算（开线/回收/逾期）并路由      │
 └──────────────────────────────────────────────────────────┘
   │
   ▼
@@ -388,6 +400,8 @@ src/mobius/prompts/
 ├── memory_distill_system.txt          # 记忆蒸馏系统提示
 ├── reviewer_system.txt                # 评审系统提示
 ├── reviewer_schema.txt                # 评审输出 JSON Schema
+├── director_blueprint_system.txt      # 全书蓝图系统提示
+├── director_blueprint_schema.txt      # 全书蓝图 JSON Schema
 ├── observer_system.txt                # 世界观察者系统提示
 └── observer_viewpoint.txt             # 支线视角提示模板
 ```
@@ -426,7 +440,7 @@ mobius/
 │   │   ├── character.py         # 角色 Agent 工厂
 │   │   ├── narrator.py          # 叙事 Agent
 │   │   ├── memory.py            # 记忆蒸馏
-│   │   ├── reviewer.py          # 评审（主题+张力+自批评）
+│   │   ├── reviewer.py          # 评审（主题+张力+结构一致性）
 │   │   ├── observer.py          # 世界观察者 + 支线视角
 │   │   └── utils.py             # LLM 响应解析工具
 │   │
@@ -443,6 +457,7 @@ mobius/
 │   │   └── routing.py           # 条件路由
 │   │
 │   ├── models/                  # Pydantic 数据模型
+│   │   ├── architecture.py      # 全书蓝图/章节合同/线索账本
 │   │   ├── belief.py            # 信念系统
 │   │   ├── desire.py            # 欲望/恐惧系统
 │   │   ├── resource.py          # 资源系统

@@ -1,0 +1,23 @@
+请严格输出以下 JSON（字段名不可更改）：
+```json
+{
+  "outlines": [
+    {
+      "chapter_index": 1,
+      "title": "章节标题",
+      "purpose": "本章职责（唯一）",
+      "core_plot": "300-500字核心剧情概要",
+      "irreversible_change": "本章不可逆变化",
+      "character_arc_delta": "本章角色弧线变化",
+      "must_payoffs": ["本章必兑现线索1", "本章必兑现线索2"],
+      "new_promises": ["本章新承诺1", "本章新承诺2"]
+    }
+  ]
+}
+```
+
+约束：
+1. outlines 必须从第1章连续到目标总章数，不得缺章。
+2. core_plot 必须是可执行剧情，不是抽象口号。
+3. purpose 不能在相邻章节重复。
+4. must_payoffs 和 new_promises 至少各 1 条；若无可填“（无）”。

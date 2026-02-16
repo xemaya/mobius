@@ -64,6 +64,36 @@ class ChapterReview(BaseModel):
     suggestions_for_next: str = Field(
         default="", description="对下一章的建议"
     )
+    theme_progression: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="本章对核心主题的推进程度",
+    )
+    theme_progression_notes: str = Field(
+        default="",
+        description="主题推进说明",
+    )
+    thread_recovery_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="本章线索回收率",
+    )
+    unrecovered_threads: list[str] = Field(
+        default_factory=list,
+        description="应回收但未回收的线索",
+    )
+    chapter_necessity: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="章节必要性评分",
+    )
+    chapter_necessity_notes: str = Field(
+        default="",
+        description="章节必要性说明",
+    )
 
 
 class StructuredMemorySummary(BaseModel):

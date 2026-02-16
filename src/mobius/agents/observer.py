@@ -42,7 +42,7 @@ def create_observer_node(
         tension_curve = state.get("tension_curve", [])
 
         if not world_events:
-            return {"next_action": "plan_chapter"}
+            return {"next_action": "blueprint_refresh"}
 
         # 构建事件列表描述
         event_descriptions = []
@@ -117,7 +117,7 @@ def create_observer_node(
 
         return {
             "world_events": world_events,
-            "next_action": "plan_chapter",
+            "next_action": "blueprint_refresh",
         }
 
     return observer_mark_node
