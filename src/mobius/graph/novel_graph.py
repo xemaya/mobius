@@ -443,6 +443,64 @@ def _requirement_hit(content: str, requirement: str) -> bool:
     return any(k in content for k in keys)
 
 
+def _requirement_score(content: str, requirement: str) -> float:
+    """按关键词命中比例计算要求兑现度。"""
+    if not requirement or requirement.strip() in {"（无）", "无"}:
+        return 1.0
+    keys = _extract_keywords(requirement)
+    if not keys:
+        return 1.0
+    hit = sum(1 for k in keys if k in content)
+    return hit / max(len(keys), 1)
+
+
+def _scene_hit(content: str, scene: Any) -> bool:
+    """判断场景是否被正文覆盖（多信号命中）。"""
+    strong_threshold = 0.34
+    medium_threshold = 0.2
+    single_signal_threshold = 0.5
+
+    signals = [
+        getattr(scene, "title", "") or "",
+        getattr(scene, "objective", "") or "",
+        getattr(scene, "info_gain", "") or "",
+        getattr(scene, "causal_to", "") or "",
+        getattr(scene, "causal_from", "") or "",
+        " ".join(getattr(scene, "expected_beats", []) or []),
+    ]
+    signal_scores = [_requirement_score(content, s) for s in signals if s and s not in {"（无）", "无"}]
+    if not signal_scores:
+        return True
+
+    # 单信号场景兜底：若任一信号高命中，视为覆盖，避免误杀纯叙事场景
+    if any(s >= single_signal_threshold for s in signal_scores):
+        return True
+
+    strong_hits = sum(1 for s in signal_scores if s >= strong_threshold)
+    medium_hits = sum(1 for s in signal_scores if s >= medium_threshold)
+    if strong_hits >= 2 or medium_hits >= 3:
+        return True
+
+    # 兜底：若角色名至少命中 1 个且标题/目标有命中，也认为覆盖
+    participants = getattr(scene, "participating_characters", []) or []
+    role_hit = any(str(name).strip() and str(name).strip() in content for name in participants)
+    title_or_objective_hit = (
+        _requirement_score(content, getattr(scene, "title", "") or "") >= 0.2
+        or _requirement_score(content, getattr(scene, "objective", "") or "") >= 0.2
+    )
+    return role_hit and title_or_objective_hit
+
+
+def _has_irreversible_cue(content: str) -> bool:
+    """检查正文尾段是否出现不可逆后果语义。"""
+    tail = (content or "")[-600:]
+    cues = [
+        "从此", "再也", "无法", "不可逆", "彻底", "破裂", "失去", "公开",
+        "签署", "删除", "封存", "终止", "被迫", "已成定局",
+    ]
+    return any(c in tail for c in cues)
+
+
 def _check_guardrail_violations(content: str, guardrails: list[str]) -> list[str]:
     """检测明显硬约束违背（规则匹配版）。"""
     violations: list[str] = []
@@ -477,14 +535,17 @@ def _create_storyboard_quality_gate_node():
             return {"next_action": "persist_expand_chapter"}
         storyboard = storyboards[latest.chapter_index - 1]
 
-        irrev_ok = _requirement_hit(latest.content, storyboard.irreversible_change)
+        irrev_score = _requirement_score(latest.content, storyboard.irreversible_change)
+        irrev_ok = irrev_score >= 0.34 and _has_irreversible_cue(latest.content)
         payoff_targets = [p for p in storyboard.must_payoffs if p.strip() not in {"", "（无）", "无"}]
-        payoff_ok = True if not payoff_targets else any(_requirement_hit(latest.content, p) for p in payoff_targets)
+        payoff_scores = [_requirement_score(latest.content, p) for p in payoff_targets]
+        required_payoff_hits = 0 if not payoff_targets else max(1, (len(payoff_targets) + 1) // 2)
+        payoff_hit_count = sum(1 for s in payoff_scores if s >= 0.34)
+        key_payoff_ok = True if not payoff_scores else payoff_scores[0] >= 0.2
+        payoff_ok = (payoff_hit_count >= required_payoff_hits) and key_payoff_ok
         violations = _check_guardrail_violations(latest.content, guardrails)
         guardrail_ok = len(violations) == 0
-        scene_cover_hits = sum(
-            1 for s in storyboard.scenes if _requirement_hit(latest.content, s.objective or s.title)
-        )
+        scene_cover_hits = sum(1 for s in storyboard.scenes if _scene_hit(latest.content, s))
         coverage_ratio = scene_cover_hits / max(len(storyboard.scenes), 1)
         coverage_ok = coverage_ratio >= 0.5
         setting_ok = True
@@ -494,9 +555,10 @@ def _create_storyboard_quality_gate_node():
 
         reasons: list[str] = []
         if not irrev_ok:
-            reasons.append("正文未体现分镜定义的不可逆变化")
+            reasons.append(f"正文未体现分镜定义的不可逆变化(命中{irrev_score:.0%}，且尾段缺少不可逆后果落地)")
         if not payoff_ok:
-            reasons.append("正文未体现本章必兑现线索")
+            key_hint = "关键线索已命中" if key_payoff_ok else "关键线索未命中"
+            reasons.append(f"正文必兑现线索命中不足({payoff_hit_count}/{required_payoff_hits}，{key_hint})")
         if not guardrail_ok:
             reasons.append("正文触发全书硬约束冲突")
         if not coverage_ok:

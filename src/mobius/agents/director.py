@@ -855,11 +855,22 @@ def create_generate_setting_pack_node(model: BaseChatModel):
         try:
             response = invoke_with_retry(model, messages, operation_name="generate_setting_pack")
             payload = extract_json(extract_response_text(response))
+            valid_categories = {"character", "organization", "location", "artifact", "concept"}
+
+            def _normalize_entity(raw: dict) -> dict:
+                normalized = dict(raw)
+                category = str(normalized.get("category", "")).strip().lower()
+                if category not in valid_categories:
+                    normalized["category"] = "concept"
+                else:
+                    normalized["category"] = category
+                return normalized
+
             entities_raw = payload.get("entities", []) if isinstance(payload, dict) else []
             entities = []
             for item in entities_raw:
                 if isinstance(item, dict):
-                    entities.append(SettingEntity.model_validate(item))
+                    entities.append(SettingEntity.model_validate(_normalize_entity(item)))
             rules_raw = payload.get("detailed_rules", []) if isinstance(payload, dict) else []
             detailed_rules = []
             for item in rules_raw:
@@ -879,12 +890,12 @@ def create_generate_setting_pack_node(model: BaseChatModel):
             organizations = []
             for item in org_raw:
                 if isinstance(item, dict):
-                    organizations.append(SettingEntity.model_validate(item))
+                    organizations.append(SettingEntity.model_validate(_normalize_entity(item)))
             items_raw = payload.get("items", []) if isinstance(payload, dict) else []
             items = []
             for item in items_raw:
                 if isinstance(item, dict):
-                    items.append(SettingEntity.model_validate(item))
+                    items.append(SettingEntity.model_validate(_normalize_entity(item)))
             setting_pack = SettingPack(
                 title=payload.get("title") if isinstance(payload, dict) else state["plot_outline"].title,
                 theme=payload.get("theme") if isinstance(payload, dict) else state.get("theme", ""),
@@ -972,10 +983,36 @@ def create_generate_storyboards_node(model: BaseChatModel):
             payload = extract_json(extract_response_text(response))
             scene_items = payload.get("scenes", []) if isinstance(payload, dict) else []
             scenes: list[StoryboardScene] = []
+            valid_scene_types = {"plot_progress", "interaction", "narration", "daily", "silence"}
+
+            def _normalize_scene(raw: dict) -> dict:
+                normalized = dict(raw)
+                scene_type = str(normalized.get("scene_type", "")).strip().lower()
+                if scene_type in valid_scene_types:
+                    normalized["scene_type"] = scene_type
+                    return normalized
+                if "/" in scene_type:
+                    parts = [p.strip() for p in scene_type.split("/") if p.strip()]
+                    for part in parts:
+                        if part in valid_scene_types:
+                            normalized["scene_type"] = part
+                            return normalized
+                if "plot" in scene_type or "progress" in scene_type:
+                    normalized["scene_type"] = "plot_progress"
+                elif "interact" in scene_type or "dialog" in scene_type:
+                    normalized["scene_type"] = "interaction"
+                elif "narrat" in scene_type:
+                    normalized["scene_type"] = "narration"
+                elif "silence" in scene_type:
+                    normalized["scene_type"] = "silence"
+                else:
+                    normalized["scene_type"] = "daily"
+                return normalized
+
             for idx, item in enumerate(scene_items, start=1):
                 if isinstance(item, dict):
                     item.setdefault("scene_index", idx)
-                    scenes.append(StoryboardScene.model_validate(item))
+                    scenes.append(StoryboardScene.model_validate(_normalize_scene(item)))
             if not scenes:
                 scenes = [
                     StoryboardScene(

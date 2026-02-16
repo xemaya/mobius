@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Callable
 
 from langchain_core.language_models import BaseChatModel
@@ -29,6 +30,22 @@ NARRATION_ONLY_PROMPT = load_prompt("narrator_narration_only")
 COMPILE_INSTRUCTIONS = load_prompt("narrator_compile_instructions")
 EXPAND_OUTLINE_SYSTEM_PROMPT = load_prompt("narrator_expand_outline_system")
 EXPAND_OUTLINE_INSTRUCTIONS = load_prompt("narrator_expand_outline_instructions")
+
+
+def _extract_anchor_terms(text: str, limit: int = 4) -> list[str]:
+    """为分镜构建可落地的锚词（用于正文命中）。"""
+    if not text:
+        return []
+    terms: list[str] = []
+    for t in re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z]{3,}", text):
+        t = t.strip()
+        if len(t) < 2:
+            continue
+        if t not in terms:
+            terms.append(t)
+        if len(terms) >= limit:
+            break
+    return terms
 
 
 def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[str, Any]]:
@@ -314,18 +331,31 @@ def create_expand_storyboard_chapter_node(
                 f"关键时间线：{'；'.join(setting_pack.core_events_timeline[:8]) if setting_pack.core_events_timeline else '（无）'}\n"
             )
         rewrite_text = f"\n# 返工要求\n{rewrite_reason}\n" if rewrite_reason else ""
-        scenes_text = "\n".join(
-            (
+        scene_blocks = []
+        for scene in storyboard.scenes:
+            anchor_terms = _extract_anchor_terms(
+                " ".join(
+                    [
+                        scene.title or "",
+                        scene.objective or "",
+                        scene.info_gain or "",
+                        " ".join(scene.expected_beats or []),
+                    ]
+                ),
+                limit=4,
+            )
+            anchor_text = "、".join(anchor_terms) if anchor_terms else "（无）"
+            scene_blocks.append(
                 f"- 场景{scene.scene_index} [{scene.scene_type}] {scene.title}\n"
                 f"  目标: {scene.objective}\n"
                 f"  冲突: {scene.conflict_type or '（无）'}\n"
                 f"  因果: {scene.causal_from or '（无）'} -> {scene.causal_to or '（无）'}\n"
                 f"  信息增量: {scene.info_gain or '（无）'}\n"
                 f"  风格: {scene.style_notes or '（无）'}\n"
-                f"  节拍: {'、'.join(scene.expected_beats) if scene.expected_beats else '（无）'}"
+                f"  节拍: {'、'.join(scene.expected_beats) if scene.expected_beats else '（无）'}\n"
+                f"  锚词: {anchor_text}"
             )
-            for scene in storyboard.scenes
-        )
+        scenes_text = "\n".join(scene_blocks)
 
         user_prompt = f"""# 扩写任务
 你正在扩写第{storyboard.chapter_index}章（共{total}章）。
@@ -345,6 +375,13 @@ def create_expand_storyboard_chapter_node(
 {rewrite_text}
 ---
 {EXPAND_OUTLINE_INSTRUCTIONS}
+
+# 执行清单（必须满足）
+1) 至少覆盖全部场景中的 50%（每个被覆盖场景需体现目标+因果或信息增量）。
+2) 优先自然命中场景锚词（不得堆砌关键词）。
+3) 必兑现线索不可省略，且需在正文里落到具体动作/对话。
+4) 禁止“总结式复述分镜”，必须写成连续的小说叙事。
+5) 结尾最后 1-2 段必须写出“不可逆后果落地”，体现从此无法回退的状态变化。
 
 # 强制字数要求
 本章最终正文必须不少于 {min_words} 字。"""
