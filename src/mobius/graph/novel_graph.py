@@ -501,21 +501,52 @@ def _has_irreversible_cue(content: str) -> bool:
     return any(c in tail for c in cues)
 
 
+def _extract_setting_anchor_terms_for_gate(setting_pack: Any, limit: int = 12) -> list[str]:
+    """从设定包抽取用于质量闸门判定的短锚词。"""
+    if not setting_pack:
+        return []
+    seed_parts: list[str] = [getattr(setting_pack, "theme", "") or ""]
+    seed_parts.extend(getattr(setting_pack, "worldview_rules", [])[:8] or [])
+    seed_parts.extend(getattr(setting_pack, "core_events_timeline", [])[:8] or [])
+    merged = " ".join(str(x) for x in seed_parts if str(x).strip())
+    return _extract_keywords(merged)[:limit]
+
+
 def _check_guardrail_violations(content: str, guardrails: list[str]) -> list[str]:
     """检测明显硬约束违背（规则匹配版）。"""
     violations: list[str] = []
-    banned_patterns = {
-        "只允许信息逆流，禁止物质逆流": ["物质回到过去", "实体回到过去", "肉身回到过去"],
-        "存档点是共振锚点，不是重置按钮": ["按下重置", "一键回档", "重置时间线"],
-        "只能信息逆流，不能物质逆流": ["物质回到过去", "实体回到过去", "时间回滚实体"],
-    }
+
+    # 通用“禁止项”抽取：从 guardrail 文本中解析“禁止XXX”
+    extracted_bans: list[str] = []
     for g in guardrails:
         g = g.strip()
-        for key, patterns in banned_patterns.items():
-            if key in g:
-                for p in patterns:
-                    if p in content:
-                        violations.append(f"触发禁用叙述: {p}")
+        for part in re.split(r"[；;。]", g):
+            part = part.strip()
+            if "禁止" in part:
+                ban = part.split("禁止", 1)[1].strip("：: ，, ")
+                # 仅取禁止项第一子句，避免整句过长导致无法命中
+                ban = re.split(r"[，,]", ban)[0].strip()
+                if len(ban) >= 2:
+                    extracted_bans.append(ban)
+
+    # 常见硬约束的语义等价违规模式（避免只做字面匹配）
+    semantic_patterns: list[str] = []
+    bans_text = " ".join(extracted_bans)
+    if any(k in bans_text for k in ["物质逆流", "实体逆流", "物质回到过去"]):
+        semantic_patterns.extend(["物质回到过去", "实体回到过去", "肉身回到过去", "带着身体回到过去"])
+    if any(k in bans_text for k in ["出场时机", "提前出场", "无铺垫出场"]):
+        semantic_patterns.extend(["突然登场", "毫无铺垫地出现", "提前现身"])
+    if any(k in bans_text for k in ["重置", "回档", "回滚", "读档"]):
+        semantic_patterns.extend(["一键回档", "按下重置", "重置时间线", "回滚到过去"])
+    if any(k in bans_text for k in ["违背世界规则", "违背设定规则"]):
+        semantic_patterns.extend(["规则失效", "设定被推翻", "世界规则被无视"])
+
+    for ban in extracted_bans:
+        if ban in content:
+            violations.append(f"触发禁用叙述: {ban}")
+    for patt in semantic_patterns:
+        if patt in content:
+            violations.append(f"触发禁用叙述(语义等价): {patt}")
     return violations
 
 
@@ -536,11 +567,12 @@ def _create_storyboard_quality_gate_node():
         storyboard = storyboards[latest.chapter_index - 1]
 
         irrev_score = _requirement_score(latest.content, storyboard.irreversible_change)
-        irrev_ok = irrev_score >= 0.34 and _has_irreversible_cue(latest.content)
+        irrev_ok = irrev_score >= 0.30 and _has_irreversible_cue(latest.content)
         payoff_targets = [p for p in storyboard.must_payoffs if p.strip() not in {"", "（无）", "无"}]
         payoff_scores = [_requirement_score(latest.content, p) for p in payoff_targets]
         required_payoff_hits = 0 if not payoff_targets else max(1, (len(payoff_targets) + 1) // 2)
-        payoff_hit_count = sum(1 for s in payoff_scores if s >= 0.34)
+        payoff_hit_threshold = 0.2 if len(payoff_targets) <= 1 else 0.34
+        payoff_hit_count = sum(1 for s in payoff_scores if s >= payoff_hit_threshold)
         key_payoff_ok = True if not payoff_scores else payoff_scores[0] >= 0.2
         payoff_ok = (payoff_hit_count >= required_payoff_hits) and key_payoff_ok
         violations = _check_guardrail_violations(latest.content, guardrails)
@@ -549,9 +581,11 @@ def _create_storyboard_quality_gate_node():
         coverage_ratio = scene_cover_hits / max(len(storyboard.scenes), 1)
         coverage_ok = coverage_ratio >= 0.5
         setting_ok = True
-        if setting_pack and setting_pack.worldview_rules:
-            # 至少命中一条设定规则关键词，防止写飞
-            setting_ok = any(_requirement_hit(latest.content, rule) for rule in setting_pack.worldview_rules)
+        setting_anchor_terms = _extract_setting_anchor_terms_for_gate(setting_pack, limit=12)
+        setting_hit_count = sum(1 for t in setting_anchor_terms if t and t in latest.content)
+        if setting_anchor_terms:
+            # 至少命中2个设定锚词，防止只擦到一个词就误判通过
+            setting_ok = setting_hit_count >= 2
 
         reasons: list[str] = []
         if not irrev_ok:
@@ -564,7 +598,7 @@ def _create_storyboard_quality_gate_node():
         if not coverage_ok:
             reasons.append(f"正文场景覆盖率不足({coverage_ratio:.0%} < 50%)")
         if not setting_ok:
-            reasons.append("正文与结构化设定锚点关联过弱")
+            reasons.append(f"正文与结构化设定锚点关联过弱(命中{setting_hit_count}/{max(len(setting_anchor_terms), 1)})")
 
         metadata = dict(state.get("metadata", {}))
         attempts = dict(metadata.get("chapter_rewrite_attempts", {}))
@@ -574,7 +608,16 @@ def _create_storyboard_quality_gate_node():
         if reasons and used < 1:
             attempts[key] = used + 1
             metadata["chapter_rewrite_attempts"] = attempts
-            metadata["chapter_rewrite_reason"] = "；".join(reasons) + "。请基于当前稿补足缺失，不要偏离分镜。"
+            top_setting_anchors = "、".join(setting_anchor_terms[:6]) if setting_anchor_terms else "（无）"
+            payoff_text = "、".join(payoff_targets) if payoff_targets else "（无）"
+            metadata["chapter_rewrite_reason"] = (
+                "；".join(reasons)
+                + f"。返工清单：\n"
+                + f"- 必须兑现线索：{payoff_text}\n"
+                + f"- 必须落地不可逆变化：{storyboard.irreversible_change or '（见分镜）'}\n"
+                + f"- 设定锚词至少命中2个：{top_setting_anchors}\n"
+                + "- 结尾最后1-2段写明‘从此/再也/无法/彻底/失去/被迫/已成定局’之一。"
+            )
             logger.warning("第%d章质量闸门未通过，触发重写: %s", latest.chapter_index, "；".join(reasons))
             return {
                 "metadata": metadata,

@@ -48,6 +48,35 @@ def _extract_anchor_terms(text: str, limit: int = 4) -> list[str]:
     return terms
 
 
+def _extract_keywords_like_gate(text: str, limit: int = 12) -> list[str]:
+    """与质量闸门一致的关键词提取策略（用于设定锚词）。"""
+    if not text:
+        return []
+    tokens = re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z]{3,}", text)
+    stop = {"必须", "本章", "剧情", "角色", "变化", "系统", "章节", "推进", "线索"}
+    uniq: list[str] = []
+    for t in tokens:
+        t = t.strip()
+        if not t or t in stop:
+            continue
+        if t not in uniq:
+            uniq.append(t)
+        if len(uniq) >= limit:
+            break
+    return uniq
+
+
+def _extract_setting_anchor_terms(setting_pack: SettingPack | None, limit: int = 10) -> list[str]:
+    """从设定集中提取可命中的短锚词。"""
+    if not setting_pack:
+        return []
+    seed_parts: list[str] = [setting_pack.theme or ""]
+    seed_parts.extend(setting_pack.worldview_rules[:8] if setting_pack.worldview_rules else [])
+    seed_parts.extend(setting_pack.core_events_timeline[:8] if setting_pack.core_events_timeline else [])
+    merged = " ".join(str(x) for x in seed_parts if str(x).strip())
+    return _extract_keywords_like_gate(merged, limit=limit)
+
+
 def create_narration_node(model: BaseChatModel) -> Callable[[NovelState], dict[str, Any]]:
     """创建旁白/环境描写节点。用于不需要角色行动的纯叙事场景。"""
 
@@ -311,7 +340,7 @@ def create_expand_storyboard_chapter_node(
         total = state.get("total_chapters", len(storyboards) or 0)
         guardrails = state.get("global_guardrails", [])
         metadata = dict(state.get("metadata", {}))
-        rewrite_reason = metadata.pop("chapter_rewrite_reason", "")
+        rewrite_reason = str(metadata.get("chapter_rewrite_reason", "") or "")
 
         if not storyboards:
             return {"error": "缺少章节分镜", "next_action": "end"}
@@ -323,12 +352,15 @@ def create_expand_storyboard_chapter_node(
 
         guardrails_text = "\n".join(f"- {g}" for g in guardrails) if guardrails else "（无）"
         setting_text = ""
+        setting_anchor_terms = _extract_setting_anchor_terms(setting_pack, limit=10)
+        setting_anchor_text = "、".join(setting_anchor_terms) if setting_anchor_terms else "（无）"
         if setting_pack:
             setting_text = (
                 f"\n# 结构化设定锚点\n"
                 f"主旨：{setting_pack.theme}\n"
                 f"规则：{'；'.join(setting_pack.worldview_rules[:6]) if setting_pack.worldview_rules else '（无）'}\n"
                 f"关键时间线：{'；'.join(setting_pack.core_events_timeline[:8]) if setting_pack.core_events_timeline else '（无）'}\n"
+                f"设定锚词（正文至少自然命中2个）：{setting_anchor_text}\n"
             )
         rewrite_text = f"\n# 返工要求\n{rewrite_reason}\n" if rewrite_reason else ""
         scene_blocks = []
@@ -380,12 +412,14 @@ def create_expand_storyboard_chapter_node(
 1) 至少覆盖全部场景中的 50%（每个被覆盖场景需体现目标+因果或信息增量）。
 2) 优先自然命中场景锚词（不得堆砌关键词）。
 3) 必兑现线索不可省略，且需在正文里落到具体动作/对话。
-4) 禁止“总结式复述分镜”，必须写成连续的小说叙事。
-5) 结尾最后 1-2 段必须写出“不可逆后果落地”，体现从此无法回退的状态变化。
+4) 至少自然命中 2 个“设定锚词”，并与当前冲突发生关联。
+5) 禁止“总结式复述分镜”，必须写成连续的小说叙事。
+6) 结尾最后 1-2 段必须写出“不可逆后果落地”，并至少出现以下触发词之一：从此/再也/无法/彻底/失去/被迫/已成定局。
 
 # 强制字数要求
 本章最终正文必须不少于 {min_words} 字。"""
 
+        base_user_prompt = user_prompt
         messages = [
             SystemMessage(content=EXPAND_OUTLINE_SYSTEM_PROMPT),
             HumanMessage(content=user_prompt),
@@ -407,9 +441,15 @@ def create_expand_storyboard_chapter_node(
                         SystemMessage(content=EXPAND_OUTLINE_SYSTEM_PROMPT),
                         HumanMessage(
                             content=(
+                                f"{base_user_prompt}\n\n"
+                                f"# 二次扩写补救（必须执行）\n"
                                 f"当前稿件仅 {len(chapter_text)} 字，低于 {min_words} 字。"
-                                "请在保持主线事件不变的前提下扩写到目标字数。"
-                                f"\n\n原文：\n{chapter_text}"
+                                "请在保持既有情节顺序不变的前提下：\n"
+                                "1) 补足字数到目标；\n"
+                                "2) 明确补足必兑现线索落地动作；\n"
+                                "3) 结尾补写不可逆后果句；\n"
+                                "4) 自然补入至少2个设定锚词。\n"
+                                f"\n\n当前草稿：\n{chapter_text}"
                             )
                         ),
                     ]

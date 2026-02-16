@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import re
 import json
 import logging
 import os
 import sys
 import uuid
+from collections import Counter
 from pathlib import Path
 
 import yaml
@@ -47,8 +49,8 @@ def _build_global_guardrails(worldview, plot_outline) -> list[str]:
         guardrails.append(f"主命题必须持续围绕：{plot_outline.theme}")
     if not guardrails:
         guardrails = [
-            "只允许信息逆流，禁止物质逆流",
-            "存档点是共振锚点，不是重置按钮",
+            "不得违背输入文档中的核心世界规则",
+            "人物设定与出场时机必须前后一致",
             "每章必须产生不可逆推进",
         ]
     return guardrails
@@ -95,6 +97,532 @@ def _sanitize_filename(name: str) -> str:
             keep.append("_")
     cleaned = "".join(keep).strip("_")
     return cleaned or "startup"
+
+
+def _dedupe_keep_order(items: list[str]) -> list[str]:
+    """去重并保持原顺序。"""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        val = str(item).strip()
+        if not val or val in seen:
+            continue
+        seen.add(val)
+        out.append(val)
+    return out
+
+
+def _normalize_string_map(obj: object) -> dict[str, str]:
+    """把任意映射对象规范为 str->str。"""
+    if not isinstance(obj, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in obj.items():
+        key = str(k).strip()
+        if not key:
+            continue
+        if isinstance(v, (dict, list)):
+            out[key] = json.dumps(v, ensure_ascii=False)
+        else:
+            out[key] = str(v).strip()
+    return out
+
+
+def _chunk_markdown(markdown_text: str, max_chars: int = 4800) -> list[str]:
+    """按标题+长度分块，避免单次抽取丢失长文信息。"""
+    lines = markdown_text.splitlines()
+    if not lines:
+        return [""]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    heading_re = re.compile(r"^\s{0,3}#{1,6}\s+")
+
+    def flush() -> None:
+        nonlocal current, current_len
+        if current:
+            text = "\n".join(current).strip()
+            if text:
+                chunks.append(text)
+        current = []
+        current_len = 0
+
+    for line in lines:
+        ln = (line or "").rstrip("\n")
+        ln_len = len(ln) + 1
+        is_heading = bool(heading_re.match(ln))
+
+        if current and (current_len + ln_len > max_chars or (is_heading and current_len >= int(max_chars * 0.6))):
+            flush()
+
+        # 单行极长，硬切
+        if ln_len > max_chars:
+            if current:
+                flush()
+            start = 0
+            while start < len(ln):
+                part = ln[start:start + max_chars]
+                if part.strip():
+                    chunks.append(part)
+                start += max_chars
+            continue
+
+        current.append(ln)
+        current_len += ln_len
+
+    flush()
+    return chunks or [markdown_text[:max_chars]]
+
+
+def _fallback_extract_from_text(text: str, stem: str = "startup") -> dict:
+    """无模型兜底：从文本抽取最小结构化信息。"""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    all_text = "\n".join(lines)
+    title_candidates = re.findall(r"《([^》]{1,40})》", all_text)
+    title = title_candidates[0] if title_candidates else stem
+
+    rules = []
+    for ln in lines:
+        if any(k in ln for k in ["原则", "规则", "必须", "禁止", "只能", "不能"]):
+            rules.append(ln[:160])
+
+    timeline = []
+    for ln in lines:
+        if re.search(r"(^T\d+|第[一二三四五六七八九十0-9]+阶段|\d{3,4}年)", ln):
+            timeline.append(ln[:160])
+
+    names = []
+    for name in re.findall(r"(?:主角|主人公|名叫|叫做)([一-龥A-Za-z·]{2,12})", all_text):
+        n = name.strip()
+        if 2 <= len(n) <= 6:
+            names.append(n)
+    names = _dedupe_keep_order(names)[:12] or ["主角"]
+
+    characters = []
+    for idx, n in enumerate(names):
+        related = [s.strip() for s in re.split(r"[。！？\n]+", all_text) if n in s][:4]
+        characters.append(
+            {
+                "name": n,
+                "role": "protagonist" if idx == 0 else "supporting",
+                "appearance": "",
+                "personality": "待补完",
+                "background": "；".join(related[:2]) if related else "待补完",
+                "abilities": [],
+                "speech_style": "",
+                "goals": [],
+                "weaknesses": [],
+                "extra": {"source_snippets": " | ".join(related[:2]) if related else ""},
+                "initial_state": {},
+            }
+        )
+
+    synopsis = next((ln for ln in lines if len(ln) >= 20), f"{title} 的故事。")
+    return {
+        "worldview": {
+            "name": f"{title}世界",
+            "description": "；".join(lines[:80])[:2000] if lines else "待补完世界观描述",
+            "rules": _dedupe_keep_order(rules)[:30],
+            "key_factions": [],
+            "extra": {"source_excerpt": "；".join(lines[:200])[:6000]},
+        },
+        "plot_outline": {
+            "title": title,
+            "genre": "",
+            "theme": "",
+            "synopsis": synopsis[:240],
+            "beginning": "；".join(lines[:40])[:700] if lines else "待补完",
+            "development": "；".join(lines[40:100])[:700] if len(lines) > 40 else "待补完",
+            "twist": "；".join(lines[100:160])[:700] if len(lines) > 100 else "待补完",
+            "conclusion": "；".join(lines[160:220])[:700] if len(lines) > 160 else "待补完",
+            "total_chapters": 20,
+            "extra_plot_points": _dedupe_keep_order(timeline)[:120],
+        },
+        "characters": characters,
+        "secondary_viewpoints": [],
+        "environment": {},
+        "novel_config": {},
+    }
+
+
+def _extract_chunk_with_llm(model, chunk_text: str, chunk_index: int, total_chunks: int) -> dict:
+    """单块抽取：提取可合并的中间结构。"""
+    schema = """{
+  "title_hints": [],
+  "worldview": {
+    "description_points": [],
+    "rules": [],
+    "factions": [],
+    "era": "",
+    "geography": "",
+    "power_system": "",
+    "social_structure": ""
+  },
+  "plot": {
+    "theme_candidates": [],
+    "synopsis_points": [],
+    "beginning_points": [],
+    "development_points": [],
+    "twist_points": [],
+    "conclusion_points": [],
+    "timeline_points": [],
+    "chapter_count_hints": []
+  },
+  "characters": [
+    {
+      "name": "",
+      "role_hint": "protagonist|antagonist|supporting|",
+      "traits": [],
+      "appearance": "",
+      "background_points": [],
+      "abilities": [],
+      "goals": [],
+      "weaknesses": [],
+      "speech_style": "",
+      "first_appearance": "",
+      "relations": []
+    }
+  ]
+}"""
+    prompt = (
+        f"你是小说设定抽取器。请抽取第 {chunk_index}/{total_chunks} 块 Markdown 的结构化信息。\n"
+        "要求：\n"
+        "1) 只抽取，不改写，不扩写。\n"
+        "2) 只输出 JSON。\n"
+        "3) 信息不足就留空字段。\n"
+        "4) 每个数组尽量保留原文表达，不要同义替换。\n\n"
+        f"JSON 结构:\n{schema}\n\n"
+        f"Markdown 分块:\n{chunk_text}"
+    )
+    response = invoke_with_retry(
+        model,
+        [
+            SystemMessage(content="你是高保真信息抽取器，只输出严格 JSON。"),
+            HumanMessage(content=prompt),
+        ],
+        operation_name=f"extract_markdown_chunk_{chunk_index}",
+    )
+    raw = extract_json(extract_response_text(response))
+    if not isinstance(raw, dict):
+        raise ValueError(f"chunk {chunk_index} 输出不是 JSON 对象")
+    return raw
+
+
+def _merge_chunk_payloads(chunk_payloads: list[dict], markdown_text: str, stem: str) -> dict:
+    """全局合并：把分块结果先做一次确定性聚合。"""
+    worldview_desc_points: list[str] = []
+    worldview_rules: list[str] = []
+    factions: list[str] = []
+    theme_candidates: list[str] = []
+    synopsis_points: list[str] = []
+    beginning_points: list[str] = []
+    development_points: list[str] = []
+    twist_points: list[str] = []
+    conclusion_points: list[str] = []
+    timeline_points: list[str] = []
+    chapter_count_hints: list[str] = []
+    title_hints: list[str] = []
+    characters_map: dict[str, dict] = {}
+
+    def merge_character(item: dict) -> None:
+        if not isinstance(item, dict):
+            return
+        name = str(item.get("name") or "").strip()
+        if not name:
+            return
+        cur = characters_map.get(name) or {
+            "name": name,
+            "role": "supporting",
+            "appearance": "",
+            "personality_parts": [],
+            "background_parts": [],
+            "abilities": [],
+            "goals": [],
+            "weaknesses": [],
+            "speech_style": "",
+            "first_appearance": "",
+            "relations": [],
+        }
+        role_hint = str(item.get("role_hint") or "").strip().lower()
+        if role_hint in {"protagonist", "antagonist", "supporting"}:
+            # 优先保留更强角色标签
+            priority = {"protagonist": 3, "antagonist": 2, "supporting": 1}
+            if priority.get(role_hint, 0) > priority.get(cur.get("role", "supporting"), 0):
+                cur["role"] = role_hint
+        if not cur["appearance"]:
+            cur["appearance"] = str(item.get("appearance") or "").strip()
+        cur["personality_parts"].extend(item.get("traits") if isinstance(item.get("traits"), list) else [])
+        cur["background_parts"].extend(
+            item.get("background_points") if isinstance(item.get("background_points"), list) else []
+        )
+        cur["abilities"].extend(item.get("abilities") if isinstance(item.get("abilities"), list) else [])
+        cur["goals"].extend(item.get("goals") if isinstance(item.get("goals"), list) else [])
+        cur["weaknesses"].extend(item.get("weaknesses") if isinstance(item.get("weaknesses"), list) else [])
+        if not cur["speech_style"]:
+            cur["speech_style"] = str(item.get("speech_style") or "").strip()
+        if not cur["first_appearance"]:
+            cur["first_appearance"] = str(item.get("first_appearance") or "").strip()
+        cur["relations"].extend(item.get("relations") if isinstance(item.get("relations"), list) else [])
+        characters_map[name] = cur
+
+    for chunk in chunk_payloads:
+        if not isinstance(chunk, dict):
+            continue
+        title_hints.extend(chunk.get("title_hints") if isinstance(chunk.get("title_hints"), list) else [])
+        worldview = chunk.get("worldview") if isinstance(chunk.get("worldview"), dict) else {}
+        worldview_desc_points.extend(
+            worldview.get("description_points") if isinstance(worldview.get("description_points"), list) else []
+        )
+        worldview_rules.extend(worldview.get("rules") if isinstance(worldview.get("rules"), list) else [])
+        factions.extend(worldview.get("factions") if isinstance(worldview.get("factions"), list) else [])
+        plot = chunk.get("plot") if isinstance(chunk.get("plot"), dict) else {}
+        theme_candidates.extend(plot.get("theme_candidates") if isinstance(plot.get("theme_candidates"), list) else [])
+        synopsis_points.extend(plot.get("synopsis_points") if isinstance(plot.get("synopsis_points"), list) else [])
+        beginning_points.extend(plot.get("beginning_points") if isinstance(plot.get("beginning_points"), list) else [])
+        development_points.extend(
+            plot.get("development_points") if isinstance(plot.get("development_points"), list) else []
+        )
+        twist_points.extend(plot.get("twist_points") if isinstance(plot.get("twist_points"), list) else [])
+        conclusion_points.extend(plot.get("conclusion_points") if isinstance(plot.get("conclusion_points"), list) else [])
+        timeline_points.extend(plot.get("timeline_points") if isinstance(plot.get("timeline_points"), list) else [])
+        chapter_count_hints.extend(
+            plot.get("chapter_count_hints") if isinstance(plot.get("chapter_count_hints"), list) else []
+        )
+        for char in (chunk.get("characters") if isinstance(chunk.get("characters"), list) else []):
+            merge_character(char)
+
+    title = ""
+    for cand in _dedupe_keep_order([*title_hints, *re.findall(r"《([^》]{1,40})》", markdown_text)]):
+        if 1 <= len(cand) <= 40:
+            title = cand
+            break
+    if not title:
+        title = stem
+
+    chapter_count = 20
+    for h in chapter_count_hints:
+        m = re.search(r"([1-9]\d{0,2})\s*章", str(h))
+        if m:
+            chapter_count = int(m.group(1))
+            break
+    if chapter_count <= 0:
+        chapter_count = 20
+
+    merged_characters = []
+    for _, c in characters_map.items():
+        merged_characters.append(
+            {
+                "name": c["name"],
+                "role": c.get("role", "supporting"),
+                "appearance": c.get("appearance", ""),
+                "personality": "；".join(_dedupe_keep_order([str(x) for x in c["personality_parts"]])[:8]) or "待补完",
+                "background": "；".join(_dedupe_keep_order([str(x) for x in c["background_parts"]])[:10]) or "待补完",
+                "abilities": _dedupe_keep_order([str(x) for x in c["abilities"]])[:10],
+                "speech_style": c.get("speech_style", ""),
+                "goals": _dedupe_keep_order([str(x) for x in c["goals"]])[:10],
+                "weaknesses": _dedupe_keep_order([str(x) for x in c["weaknesses"]])[:10],
+                "extra": {
+                    "first_appearance": c.get("first_appearance", ""),
+                    "relations": "；".join(_dedupe_keep_order([str(x) for x in c["relations"]])[:8]),
+                },
+                "initial_state": {},
+            }
+        )
+    if not merged_characters:
+        merged_characters = [{"name": "主角", "role": "protagonist", "personality": "待补完", "background": "待补完"}]
+
+    return {
+        "worldview": {
+            "name": f"{title}世界",
+            "description": "；".join(_dedupe_keep_order([str(x) for x in worldview_desc_points])[:80])[:3000],
+            "era": "",
+            "geography": "",
+            "power_system": "",
+            "social_structure": "",
+            "key_factions": _dedupe_keep_order([str(x) for x in factions])[:30],
+            "rules": _dedupe_keep_order([str(x) for x in worldview_rules])[:60],
+            "extra": {},
+        },
+        "plot_outline": {
+            "title": title,
+            "genre": "",
+            "theme": _dedupe_keep_order([str(x) for x in theme_candidates])[:1][0] if theme_candidates else "",
+            "synopsis": "；".join(_dedupe_keep_order([str(x) for x in synopsis_points])[:12])[:800],
+            "beginning": "；".join(_dedupe_keep_order([str(x) for x in beginning_points])[:18])[:1200],
+            "development": "；".join(_dedupe_keep_order([str(x) for x in development_points])[:24])[:1200],
+            "twist": "；".join(_dedupe_keep_order([str(x) for x in twist_points])[:18])[:1200],
+            "conclusion": "；".join(_dedupe_keep_order([str(x) for x in conclusion_points])[:18])[:1200],
+            "total_chapters": chapter_count,
+            "extra_plot_points": _dedupe_keep_order([str(x) for x in timeline_points])[:200],
+        },
+        "characters": merged_characters,
+        "secondary_viewpoints": [],
+        "environment": {},
+        "novel_config": {},
+    }
+
+
+def _global_merge_with_llm(model, merged_seed: dict, markdown_text: str) -> dict:
+    """全局合并：在确定性聚合结果上做一次 LLM 去重融合。"""
+    schema_hint = """{
+  "worldview": {"name":"","description":"","era":"","geography":"","power_system":"","social_structure":"","key_factions":[],"rules":[],"extra":{}},
+  "plot_outline": {"title":"","genre":"","theme":"","synopsis":"","beginning":"","development":"","twist":"","conclusion":"","total_chapters":20,"extra_plot_points":[]},
+  "characters": [{"name":"","role":"protagonist|antagonist|supporting","appearance":"","personality":"","background":"","abilities":[],"speech_style":"","goals":[],"weaknesses":[],"extra":{},"initial_state":{}}],
+  "secondary_viewpoints": [],
+  "environment": {},
+  "novel_config": {}
+}"""
+    prompt = (
+        "你是小说设定全局合并器。给你两份输入：\n"
+        "1) 分块抽取后的聚合草案（可能重复/冲突）\n"
+        "2) 原文片段\n\n"
+        "任务：输出高保真 preset JSON。\n"
+        "要求：\n"
+        "- 尽量保留原文信息，不要删掉关键设定；\n"
+        "- 去重并合并同名角色；\n"
+        "- 不要臆造文档中不存在的设定；\n"
+        "- 只输出 JSON。\n\n"
+        f"目标 JSON 结构:\n{schema_hint}\n\n"
+        f"聚合草案:\n{json.dumps(merged_seed, ensure_ascii=False)}\n\n"
+        f"原文片段:\n{markdown_text[:24000]}"
+    )
+    response = invoke_with_retry(
+        model,
+        [
+            SystemMessage(content="你只输出严格 JSON。"),
+            HumanMessage(content=prompt),
+        ],
+        operation_name="merge_markdown_chunks_to_preset",
+    )
+    raw = extract_json(extract_response_text(response))
+    if not isinstance(raw, dict):
+        raise ValueError("全局合并输出不是 JSON 对象")
+    return raw
+
+
+def _validate_and_fill_payload(payload: dict, markdown_text: str, stem: str) -> tuple[dict, dict]:
+    """校验补齐：对 payload 做一致性检查与最小补全。"""
+    normalized = _normalize_markdown_payload(payload, markdown_text, stem)
+    report: dict = {"warnings": [], "stats": {}}
+
+    plot = normalized.get("plot_outline", {})
+    chars = normalized.get("characters", [])
+    worldview = normalized.get("worldview", {})
+
+    # 章节数兜底：优先文档中的“xx章”
+    chapter_hint = 0
+    for m in re.findall(r"([1-9]\d{0,2})\s*章", markdown_text):
+        try:
+            chapter_hint = max(chapter_hint, int(m))
+        except Exception:
+            pass
+    if not plot.get("total_chapters"):
+        plot["total_chapters"] = chapter_hint or 20
+    else:
+        try:
+            plot["total_chapters"] = int(plot.get("total_chapters") or 20)
+        except Exception:
+            plot["total_chapters"] = chapter_hint or 20
+
+    # 规则补齐：从原文补充“原则/规则/必须/禁止”
+    rules = worldview.get("rules") if isinstance(worldview.get("rules"), list) else []
+    if len(rules) < 8:
+        extra_rules = []
+        for ln in markdown_text.splitlines():
+            line = ln.strip()
+            if any(k in line for k in ["原则", "规则", "必须", "禁止", "只能", "不能"]):
+                extra_rules.append(line[:180])
+        worldview["rules"] = _dedupe_keep_order([*(str(x) for x in rules), *extra_rules])[:80]
+        if len(worldview["rules"]) < 5:
+            report["warnings"].append("worldview.rules 命中较少，建议补充结构化规则段落")
+
+    # 关键事件补齐：从时间线关键词补充
+    points = plot.get("extra_plot_points") if isinstance(plot.get("extra_plot_points"), list) else []
+    if len(points) < 10:
+        recovered = []
+        for ln in markdown_text.splitlines():
+            line = ln.strip()
+            if re.search(r"(^T\d+|第[一二三四五六七八九十0-9]+阶段|\d{3,4}年|节点|事件)", line):
+                recovered.append(line[:180])
+        plot["extra_plot_points"] = _dedupe_keep_order([*(str(x) for x in points), *recovered])[:240]
+
+    # 角色补齐：保证至少一个主角 + extra 为 string map
+    for item in chars:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in {"protagonist", "antagonist", "supporting"}:
+            item["role"] = "supporting"
+        if not str(item.get("personality") or "").strip():
+            item["personality"] = "待补完"
+        item["extra"] = _normalize_string_map(item.get("extra"))
+
+    if not chars:
+        normalized["characters"] = [
+            {
+                "name": "主角",
+                "role": "protagonist",
+                "age": "",
+                "gender": "",
+                "appearance": "",
+                "personality": "待补完",
+                "background": "待补完",
+                "abilities": [],
+                "speech_style": "",
+                "goals": [],
+                "weaknesses": [],
+                "extra": {},
+                "initial_state": {},
+            }
+        ]
+        report["warnings"].append("未抽取到角色，已补默认主角占位")
+    elif not any(str(c.get("role", "")).lower() == "protagonist" for c in normalized["characters"]):
+        normalized["characters"][0]["role"] = "protagonist"
+        report["warnings"].append("未识别到主角角色，已将首角色设为 protagonist")
+
+    # 统计
+    report["stats"] = {
+        "characters": len(normalized.get("characters", [])),
+        "world_rules": len(worldview.get("rules", []) if isinstance(worldview.get("rules"), list) else []),
+        "timeline_points": len(plot.get("extra_plot_points", []) if isinstance(plot.get("extra_plot_points"), list) else []),
+        "total_chapters": int(plot.get("total_chapters") or 0),
+    }
+    return normalized, report
+
+
+def _extract_markdown_payload_pipeline(markdown_text: str, stem: str, model=None, use_llm: bool = True) -> tuple[dict, dict]:
+    """分块抽取 + 全局合并 + 校验补齐。"""
+    diagnostics: dict = {"mode": "fallback", "chunks": 0, "chunk_failures": 0}
+    if not use_llm or model is None:
+        normalized, report = _validate_and_fill_payload(_fallback_extract_from_text(markdown_text, stem), markdown_text, stem)
+        diagnostics["mode"] = "fallback_only"
+        diagnostics["validation_report"] = report
+        return normalized, diagnostics
+
+    chunks = _chunk_markdown(markdown_text)
+    diagnostics["chunks"] = len(chunks)
+    chunk_payloads: list[dict] = []
+    for i, chunk in enumerate(chunks, start=1):
+        try:
+            chunk_payloads.append(_extract_chunk_with_llm(model, chunk, i, len(chunks)))
+        except Exception:
+            diagnostics["chunk_failures"] = int(diagnostics.get("chunk_failures", 0)) + 1
+            chunk_payloads.append(_fallback_extract_from_text(chunk, stem=f"{stem}_chunk_{i}"))
+
+    merged_seed = _merge_chunk_payloads(chunk_payloads, markdown_text, stem)
+    diagnostics["mode"] = "chunk_merge"
+    diagnostics["chunk_payloads"] = len(chunk_payloads)
+    try:
+        merged_by_llm = _global_merge_with_llm(model, merged_seed, markdown_text)
+        diagnostics["mode"] = "chunk_merge_plus_global_llm"
+    except Exception:
+        merged_by_llm = merged_seed
+        diagnostics["global_merge_fallback"] = True
+
+    normalized, report = _validate_and_fill_payload(merged_by_llm, markdown_text, stem)
+    diagnostics["validation_report"] = report
+    return normalized, diagnostics
 
 
 def _normalize_markdown_payload(payload: dict, markdown_text: str, stem: str) -> dict:
@@ -160,7 +688,7 @@ def _normalize_markdown_payload(payload: dict, markdown_text: str, stem: str) ->
                 "speech_style": item.get("speech_style", ""),
                 "goals": item.get("goals", []),
                 "weaknesses": item.get("weaknesses", []),
-                "extra": item.get("extra", {}),
+                "extra": _normalize_string_map(item.get("extra")),
                 "initial_state": item.get("initial_state", {}),
             }
         )
@@ -183,11 +711,39 @@ def _normalize_markdown_payload(payload: dict, markdown_text: str, stem: str) ->
         ]
 
     novel_config = payload.get("novel_config") if isinstance(payload.get("novel_config"), dict) else {}
-    secondary_viewpoints = (
-        payload.get("secondary_viewpoints")
-        if isinstance(payload.get("secondary_viewpoints"), list)
-        else []
-    )
+    raw_secondary = payload.get("secondary_viewpoints") if isinstance(payload.get("secondary_viewpoints"), list) else []
+    secondary_viewpoints: list[dict] = []
+    for idx, item in enumerate(raw_secondary, start=1):
+        if isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            vp_id = str(item.get("id") or "").strip() or f"vp_{idx:02d}"
+            voice_style = str(item.get("voice_style") or "").strip()
+            if not name or not voice_style:
+                continue
+            secondary_viewpoints.append(
+                {
+                    "id": vp_id,
+                    "name": name,
+                    "perspective_type": str(item.get("perspective_type") or "bystander"),
+                    "voice_style": voice_style,
+                    "can_observe": item.get("can_observe") if isinstance(item.get("can_observe"), list) else [],
+                    "trigger_condition": str(item.get("trigger_condition") or ""),
+                }
+            )
+        elif isinstance(item, str) and item.strip():
+            text = item.strip()
+            title = text.split("：", 1)[0].strip() if "：" in text else text[:18]
+            secondary_viewpoints.append(
+                {
+                    "id": f"vp_{idx:02d}",
+                    "name": title or f"视角{idx}",
+                    "perspective_type": "bystander",
+                    "voice_style": text,
+                    "can_observe": [],
+                    "trigger_condition": "",
+                }
+            )
+
     environment = payload.get("environment") if isinstance(payload.get("environment"), dict) else {}
     return {
         "worldview": normalized_worldview,
@@ -197,6 +753,142 @@ def _normalize_markdown_payload(payload: dict, markdown_text: str, stem: str) ->
         "environment": environment,
         "novel_config": novel_config,
     }
+
+
+def _fallback_markdown_payload(markdown_text: str, stem: str) -> dict:
+    """通用兜底：不依赖作品特定词汇，仅做最小结构化抽取。"""
+    lines = [ln.strip() for ln in markdown_text.splitlines() if ln.strip()]
+    text = "\n".join(lines)
+    sentences = [s.strip() for s in re.split(r"[。！？\n]+", text) if s.strip()]
+
+    # 标题：优先《书名》, 其次 markdown 一级标题, 最后文件名
+    titles = [m.strip() for m in re.findall(r"《([^》]+)》", text)]
+    md_h1 = [ln.lstrip("# ").strip() for ln in lines if ln.startswith("#")]
+    title = titles[0] if titles else (md_h1[0] if md_h1 else stem)
+    title = title[:40] if title else stem
+
+    # 规则：抽取带“原则/规则/必须/禁止/只能/不能”的短句
+    rules: list[str] = []
+    for ln in lines:
+        if any(k in ln for k in ["原则", "规则", "必须", "禁止", "只能", "不能"]):
+            if len(ln) <= 120 and ln not in rules:
+                rules.append(ln)
+    rules = rules[:24]
+
+    # 时间线：抽取 T轴 / 年份 / 阶段标题
+    timeline: list[str] = []
+    for ln in lines:
+        if re.match(r"^T\d+", ln) or re.search(r"\d{3,4}年", ln) or re.search(r"第[一二三四五六七八九十0-9]+阶段", ln):
+            if ln not in timeline:
+                timeline.append(ln)
+    timeline = timeline[:80]
+
+    # 角色：通用模式抽取（不绑定具体姓氏）
+    role_candidates: list[str] = []
+    patterns = [
+        r"(?:主人公|主角|角色名叫|名叫|叫做)([一-龥A-Za-z·]{2,12})",
+        r"([一-龥A-Za-z·]{2,12})(?:，|。|、).{0,8}(?:男|女|男性|女性)",
+        r"([一-龥A-Za-z·]{2,12})(?:是|为).{0,8}(?:教授|学生|科学家|研究员|医生|军官|工程师)",
+    ]
+    for p in patterns:
+        for m in re.findall(p, text):
+            name = str(m).strip()
+            if 2 <= len(name) <= 6:
+                role_candidates.append(name)
+
+    # 去噪（通用停用词）
+    stop_words = {
+        "这个故事", "人类社会", "未来社会", "核心原则", "时间线",
+        "社会现状", "世界观", "主旨命题", "最终阶段", "角色设定", "剧情概述",
+    }
+    def _looks_like_person_name(name: str) -> bool:
+        n = name.strip()
+        if len(n) < 2 or len(n) > 4:
+            return False
+        if not re.fullmatch(r"[一-龥·]{2,4}", n):
+            return False
+        if any(x in n for x in ["的", "在", "了", "和", "社会", "阶段", "故事", "小姑娘"]):
+            return False
+        return True
+
+    dedup_names: list[str] = []
+    for n, _ in Counter(role_candidates).most_common(24):
+        if n in stop_words or not _looks_like_person_name(n):
+            continue
+        if n not in dedup_names:
+            dedup_names.append(n)
+    dedup_names = dedup_names[:10]
+
+    # 角色兜底：至少一个主角占位
+    if not dedup_names:
+        dedup_names = ["主角"]
+
+    protagonists: list[str] = []
+    for s in sentences[:200]:
+        if any(k in s for k in ["主人公", "主角"]):
+            for name in dedup_names:
+                if name in s and name not in protagonists:
+                    protagonists.append(name)
+    if not protagonists:
+        protagonists = [dedup_names[0]]
+
+    characters = []
+    for n in dedup_names:
+        related = [s for s in sentences if n in s][:6]
+        characters.append(
+            {
+                "name": n,
+                "role": "protagonist" if n in protagonists else "supporting",
+                "appearance": "",
+                "personality": "待补完",
+                "background": "；".join(related[:3]) if related else "待补完",
+                "abilities": [],
+                "speech_style": "",
+                "goals": [],
+                "weaknesses": [],
+                "extra": {"source_snippets": " | ".join(related[:2]) if related else ""},
+                "initial_state": {},
+            }
+        )
+
+    synopsis = next((ln[:160] for ln in lines if len(ln) >= 20), f"{title} 的故事。")
+    theme = "待补完"
+    for ln in lines:
+        if any(k in ln for k in ["主题", "主旨", "命题"]):
+            theme = ln[:120]
+            break
+
+    # 四段式：按文本位置切片，不假设特定关键词
+    body = [ln for ln in lines if not ln.startswith("#")]
+    cut = max(1, len(body) // 4)
+    beginning = "；".join(body[:cut])[:520] if body else "待补完"
+    development = "；".join(body[cut:2 * cut])[:520] if len(body) > cut else "待补完"
+    twist = "；".join(body[2 * cut:3 * cut])[:520] if len(body) > 2 * cut else "待补完"
+    conclusion = "；".join(body[3 * cut:])[:520] if len(body) > 3 * cut else "待补完"
+
+    raw = {
+        "title": title,
+        "worldview": {
+            "name": f"{title}世界",
+            "description": "；".join(lines[:40])[:1200] if lines else "待补完世界观描述",
+            "rules": rules,
+            "extra": {"source_excerpt": "；".join(lines[:120])[:4000]},
+        },
+        "plot_outline": {
+            "title": title,
+            "genre": "",
+            "theme": theme,
+            "synopsis": synopsis,
+            "beginning": beginning,
+            "development": development,
+            "twist": twist,
+            "conclusion": conclusion,
+            "total_chapters": 20,
+            "extra_plot_points": timeline,
+        },
+        "characters": characters,
+    }
+    return raw
 
 
 def _translate_markdown_to_preset_yaml(markdown_path: Path, output_dir: Path, use_llm: bool = True) -> Path:
@@ -210,54 +902,36 @@ def _translate_markdown_to_preset_yaml(markdown_path: Path, output_dir: Path, us
         return yaml_path
 
     payload: dict
+    diagnostics: dict = {}
     try:
-        if not use_llm:
-            raise RuntimeError("offline-mode")
-
-        cfg = NovelConfig().director_model
-        cfg.model_name = os.environ.get("MOBIUS_MODEL", cfg.model_name)
-        cfg.provider = os.environ.get("MOBIUS_PROVIDER", cfg.provider)
-        cfg.temperature = float(os.environ.get("MOBIUS_TEMPERATURE", str(cfg.temperature)))
-        model = _init_model(cfg)
-
-        schema_hint = """{
-  "worldview": {"name":"","description":"","era":"","geography":"","power_system":"","social_structure":"","key_factions":[],"rules":[],"extra":{}},
-  "plot_outline": {"title":"","genre":"","theme":"","synopsis":"","beginning":"","development":"","twist":"","conclusion":"","total_chapters":20,"extra_plot_points":[]},
-  "characters": [{"name":"","role":"protagonist|antagonist|supporting","appearance":"","personality":"","background":"","abilities":[],"speech_style":"","goals":[],"weaknesses":[],"initial_state":{}}],
-  "secondary_viewpoints": [],
-  "environment": {},
-  "novel_config": {}
-}"""
-        prompt = (
-            "你是小说工程助手。请把用户提供的 Markdown 启动文档转换为 Mobius 的 preset JSON。\n"
-            "要求：\n"
-            "1) 只输出 JSON，不要解释。\n"
-            "2) 不要臆造无法支撑的细节，可留空字符串或空数组。\n"
-            "3) `characters` 至少输出 1 个主角。\n"
-            "4) `plot_outline.total_chapters` 默认 20，若文档明确给出则使用文档值。\n"
-            "5) 若人物出场时机有描述，请放入角色 `extra.first_appearance`。\n\n"
-            f"JSON 结构:\n{schema_hint}\n\n"
-            f"Markdown 文档:\n{markdown_text}"
+        model = None
+        if use_llm:
+            cfg = NovelConfig().director_model
+            cfg.model_name = os.environ.get("MOBIUS_MODEL", cfg.model_name)
+            cfg.provider = os.environ.get("MOBIUS_PROVIDER", cfg.provider)
+            cfg.temperature = float(os.environ.get("MOBIUS_TEMPERATURE", str(cfg.temperature)))
+            model = _init_model(cfg)
+        payload, diagnostics = _extract_markdown_payload_pipeline(
+            markdown_text=markdown_text,
+            stem=markdown_path.stem,
+            model=model,
+            use_llm=use_llm,
         )
-        response = invoke_with_retry(
-            model,
-            [
-                SystemMessage(content="你只输出严格 JSON。"),
-                HumanMessage(content=prompt),
-            ],
-            operation_name="translate_markdown_to_preset",
-        )
-        raw = extract_json(extract_response_text(response))
-        if not isinstance(raw, dict):
-            raise ValueError("LLM 输出不是 JSON 对象")
-        payload = _normalize_markdown_payload(raw, markdown_text, markdown_path.stem)
     except Exception as e:
-        if str(e) != "offline-mode":
-            console.print(f"[yellow]Markdown 转 preset 调用失败，使用兜底模板：{e}[/yellow]")
-        payload = _normalize_markdown_payload({}, markdown_text, markdown_path.stem)
+        console.print(f"[yellow]分块抽取链路失败，回退兜底抽取：{e}[/yellow]")
+        payload, diagnostics = _extract_markdown_payload_pipeline(
+            markdown_text=markdown_text,
+            stem=markdown_path.stem,
+            model=None,
+            use_llm=False,
+        )
 
     yaml_path.write_text(
         yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    (bootstrap_dir / f"{_sanitize_filename(markdown_path.stem)}.extract_report.json").write_text(
+        json.dumps(diagnostics, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return yaml_path
@@ -452,12 +1126,22 @@ def _init_model(model_config: ModelConfig):
 
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(
-            model=model_config.model_name,
-            temperature=model_config.temperature,
-            max_output_tokens=model_config.max_tokens,
-        )
+        kwargs: dict = {
+            "model": model_config.model_name,
+            "temperature": model_config.temperature,
+            "max_output_tokens": model_config.max_tokens,
+        }
+        # 剧情创作场景默认关闭 Gemini 文本安全拦截（可通过环境变量恢复默认）
+        # 可选值：off(default) / default
+        safety_mode = os.environ.get("MOBIUS_GEMINI_SAFETY_MODE", "off").strip().lower()
+        if safety_mode == "off":
+            kwargs["safety_settings"] = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            }
+        return ChatGoogleGenerativeAI(**kwargs)
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
 
@@ -852,6 +1536,26 @@ def cmd_outline(args: argparse.Namespace) -> None:
     console.print(f"[cyan]请人工审阅: {output_mgr.root / 'full_outline.md'}[/cyan]")
     console.print("[yellow]审阅通过后执行：mobius approve-outline --output "
                   f"{output_mgr.root}[/yellow]")
+
+
+def cmd_extract_preset(args: argparse.Namespace) -> None:
+    """仅执行 Markdown->preset 抽取，不推进 outline。"""
+    output_dir = Path(args.output)
+    src = Path(args.setting)
+    if not src.exists():
+        console.print(f"[red]文件不存在: {src}[/red]")
+        sys.exit(1)
+    if src.suffix.lower() != ".md":
+        console.print("[red]extract-preset 仅支持 .md 启动文档。[/red]")
+        sys.exit(1)
+
+    use_llm = not bool(getattr(args, "dry_run", False))
+    preset_path = _translate_markdown_to_preset_yaml(src, output_dir, use_llm=use_llm)
+    report_path = output_dir / "bootstrap" / f"{_sanitize_filename(src.stem)}.extract_report.json"
+    console.print(f"[bold green]Preset 抽取完成[/bold green]")
+    console.print(f"[cyan]preset: {preset_path}[/cyan]")
+    console.print(f"[cyan]report: {report_path}[/cyan]")
+    console.print("[yellow]本命令仅交付 preset，不会触发 outline/storyboard/expand。[/yellow]")
 
 
 def cmd_storyboard(args: argparse.Namespace) -> None:
@@ -1408,6 +2112,21 @@ def main() -> None:
         "--dry-run", action="store_true", help="离线模式：不调用模型，生成设定集草案"
     )
 
+    extract_parser = subparsers.add_parser(
+        "extract-preset",
+        help="仅执行 Markdown 启动文档到 preset 的抽取（不推进后续流程）",
+    )
+    extract_parser.add_argument("setting", help="Markdown 启动文档路径（.md）")
+    extract_parser.add_argument(
+        "--output", "-o", default="output", help="输出目录（默认: output）"
+    )
+    extract_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="详细日志输出"
+    )
+    extract_parser.add_argument(
+        "--dry-run", action="store_true", help="离线模式：不调用模型，使用兜底抽取"
+    )
+
     outline_parser = subparsers.add_parser("outline", help="基于设定集生成全书章节概要（Layer1-B）")
     outline_parser.add_argument("setting", help="设定源文件路径（YAML 或 Markdown 启动文档）")
     outline_parser.add_argument(
@@ -1489,6 +2208,8 @@ def main() -> None:
 
     if args.command == "setting-pack":
         cmd_setting_pack(args)
+    elif args.command == "extract-preset":
+        cmd_extract_preset(args)
     elif args.command == "outline":
         cmd_outline(args)
     elif args.command == "storyboard":

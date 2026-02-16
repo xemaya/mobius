@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from langchain_core.language_models import BaseChatModel
@@ -739,7 +740,110 @@ def create_generate_outlines_node(model: BaseChatModel):
                 f"待补完：{'；'.join(setting_pack.missing_items) if setting_pack.missing_items else '（无）'}"
             )
 
-        user_prompt = f"""{worldview_ctx}
+        outlines: list[ChapterOutline] = []
+        try:
+            # 逐章生成，避免单次大响应导致断流
+            def _is_placeholder_text(text: str) -> bool:
+                t = str(text or "").strip()
+                if not t:
+                    return True
+                markers = ["（无）", "待补完", "主线职责", "推进主线", "占位", "暂无"]
+                return any(m in t for m in markers)
+
+            def _to_list(value: Any) -> list[str]:
+                if isinstance(value, list):
+                    return [str(x).strip() for x in value if str(x).strip()]
+                if isinstance(value, str):
+                    parts = re.split(r"[；;。\n、]+", value)
+                    return [p.strip() for p in parts if p.strip()]
+                return []
+
+            def _clean_mission_text(mission_line: str) -> str:
+                text = str(mission_line or "").strip()
+                if "：" in text:
+                    text = text.split("：", 1)[1].strip()
+                return text or "围绕主命题推进冲突并产生不可逆后果"
+
+            def _normalize_outline_item(item: dict, idx: int, mission_line: str) -> dict:
+                data = dict(item)
+                data["chapter_index"] = idx
+                mission_text = _clean_mission_text(mission_line)
+                if "title" not in data or not str(data.get("title", "")).strip():
+                    data["title"] = (
+                        data.get("chapter_title")
+                        or data.get("chapter_name")
+                        or f"第{idx}章"
+                    )
+                if "purpose" not in data or not str(data.get("purpose", "")).strip():
+                    data["purpose"] = (
+                        data.get("chapter_purpose")
+                        or data.get("chapter_goal")
+                        or data.get("chapter_responsibility")
+                        or mission_text
+                    )
+                # 防止职责落为模板话术，强制用 mission 回填
+                purpose_text = str(data.get("purpose", "")).strip()
+                if (
+                    not purpose_text
+                    or "推进第" in purpose_text
+                    or purpose_text in {"本章职责", "本章主线职责", "推进主线"}
+                ):
+                    data["purpose"] = mission_text
+                if "core_plot" not in data or not str(data.get("core_plot", "")).strip():
+                    data["core_plot"] = (
+                        data.get("plot")
+                        or data.get("summary")
+                        or data.get("chapter_summary")
+                        or f"第{idx}章核心剧情待补充。"
+                    )
+                if "irreversible_change" not in data or not str(data.get("irreversible_change", "")).strip():
+                    data["irreversible_change"] = (
+                        data.get("irrev_change")
+                        or data.get("irreversible")
+                        or "角色关系发生不可逆变化（待细化）"
+                    )
+                if "character_arc_delta" not in data or not str(data.get("character_arc_delta", "")).strip():
+                    data["character_arc_delta"] = (
+                        data.get("character_arc")
+                        or data.get("arc_delta")
+                        or "角色弧线出现阶段性位移（待细化）"
+                    )
+                elif isinstance(data.get("character_arc_delta"), dict):
+                    arc_map = data.get("character_arc_delta", {})
+                    data["character_arc_delta"] = "；".join(
+                        f"{k}: {v}" for k, v in arc_map.items() if str(k).strip() and str(v).strip()
+                    ) or "角色弧线出现阶段性位移（待细化）"
+                data["must_payoffs"] = _to_list(
+                    data.get("must_payoffs")
+                    or data.get("payoffs")
+                    or data.get("required_payoffs")
+                    or "（无）"
+                ) or ["（无）"]
+                data["new_promises"] = _to_list(
+                    data.get("new_promises")
+                    or data.get("promises")
+                    or data.get("new_threads")
+                    or "（无）"
+                ) or ["（无）"]
+                return data
+
+            # 章际承诺池：上一章抛出的承诺必须在后续章节逐步兑现
+            promise_backlog: list[str] = []
+
+            for chapter_idx in range(1, total + 1):
+                mission = mission_lines[chapter_idx - 1] if chapter_idx - 1 < len(mission_lines) else f"- 第{chapter_idx}章：推进主线"
+                history_ctx = "（无）"
+                if outlines:
+                    recent = outlines[-2:]
+                    history_ctx = "\n".join(
+                        f"- 第{o.chapter_index}章 {o.title} | 不可逆:{o.irreversible_change} | 新承诺:{'、'.join(o.new_promises) if o.new_promises else '（无）'}"
+                        for o in recent
+                    )
+
+                expected_payoff = promise_backlog[0] if promise_backlog else ""
+                expected_payoff_ctx = expected_payoff if expected_payoff else "（无硬性回收项，按剧情自然回收）"
+
+                user_prompt = f"""{worldview_ctx}
 
 {characters_ctx}
 
@@ -747,58 +851,101 @@ def create_generate_outlines_node(model: BaseChatModel):
 
 {setting_ctx}
 
-# 章节职责（必须逐章覆盖）
-{chr(10).join(mission_lines)}
-
 # 全书硬约束
 {guardrails_ctx}
 
+# 已生成章节（用于连续推进）
+{history_ctx}
+
+# 章际回收要求（硬约束）
+本章必须优先回收以下承诺中的至少 1 条（若存在）：
+{expected_payoff_ctx}
+
+# 当前目标章节
+{mission}
+
 ---
-请一次性生成 1 到 {total} 章的概要，要求：
-1. 每章 300-500 字 core_plot。
-2. 每章必须有明确且不可逆的变化（irreversible_change）。
-3. 每章职责不能重复，且要形成连续推进。
-4. 每章至少提供 1 条 must_payoffs 与 1 条 new_promises（如确实没有可填“（无）”）。
-5. character_arc_delta 必须反映角色阶段性变化，而非抽象空话。
+请只生成第 {chapter_idx} 章概要（不要输出其他章节），要求：
+1. core_plot 300-500 字。
+2. 必须有明确且不可逆变化（irreversible_change）。
+3. 必须与已生成章节连续推进，不可重复职责。
+4. must_payoffs 和 new_promises 至少各 1 条（无则写“（无）”）。
+5. 若“章际回收要求”非空，must_payoffs 第一条必须落在该承诺上（可同义改写，但语义要一致）。
+5. character_arc_delta 必须具体，不能是空话。
 
-{OUTLINE_SCHEMA}
+请输出单个 JSON 对象，字段与章节概要 schema 完全一致。
 """
+                messages = [
+                    SystemMessage(content=OUTLINE_SYSTEM_PROMPT),
+                    HumanMessage(content=user_prompt),
+                ]
+                try:
+                    response = invoke_with_retry(
+                        model,
+                        messages,
+                        operation_name=f"generate_outline_chapter_{chapter_idx}",
+                    )
+                    payload = extract_json(extract_response_text(response))
+                    item = payload.get("outline", payload) if isinstance(payload, dict) else payload
+                    if not isinstance(item, dict):
+                        raise ValueError("章节概要输出格式错误：必须是对象")
+                    normalized_item = _normalize_outline_item(item, chapter_idx, mission)
 
-        messages = [
-            SystemMessage(content=OUTLINE_SYSTEM_PROMPT),
-            HumanMessage(content=user_prompt),
-        ]
+                    # 强化章际因果链：若存在待回收承诺，优先修正 must_payoffs 首条
+                    if expected_payoff:
+                        payoffs = normalized_item.get("must_payoffs", []) or []
+                        if not payoffs:
+                            payoffs = [expected_payoff]
+                        elif _is_placeholder_text(payoffs[0]):
+                            payoffs[0] = expected_payoff
+                        elif expected_payoff not in payoffs:
+                            payoffs.insert(0, expected_payoff)
+                        normalized_item["must_payoffs"] = payoffs
 
-        try:
-            response = invoke_with_retry(model, messages, operation_name="generate_outlines")
-            payload = extract_json(extract_response_text(response))
-            raw_outlines = payload.get("outlines", []) if isinstance(payload, dict) else payload
-            if not isinstance(raw_outlines, list):
-                raise ValueError("outlines 输出格式错误：必须是数组")
+                    # 去重清洗，避免章节内重复承诺堆叠
+                    must_payoffs = []
+                    for p in normalized_item.get("must_payoffs", []):
+                        text = str(p).strip()
+                        if text and text not in must_payoffs:
+                            must_payoffs.append(text)
+                    new_promises = []
+                    for p in normalized_item.get("new_promises", []):
+                        text = str(p).strip()
+                        if text and text not in new_promises:
+                            new_promises.append(text)
+                    normalized_item["must_payoffs"] = must_payoffs or ["（无）"]
+                    normalized_item["new_promises"] = new_promises or ["（无）"]
 
-            outlines: list[ChapterOutline] = []
-            for idx, item in enumerate(raw_outlines[:total], start=1):
-                if isinstance(item, dict):
-                    item.setdefault("chapter_index", idx)
-                    outlines.append(ChapterOutline.model_validate(item))
+                    chapter_outline = ChapterOutline.model_validate(normalized_item)
+                    outlines.append(chapter_outline)
 
-            if len(outlines) < total:
-                # LLM 少给章节时补齐占位，避免流程中断
-                for i in range(len(outlines) + 1, total + 1):
+                    # 更新承诺池：已回收则出队，本章新承诺入队
+                    if expected_payoff and promise_backlog:
+                        promise_backlog.pop(0)
+                    for promise in chapter_outline.new_promises:
+                        text = str(promise).strip()
+                        if text and not _is_placeholder_text(text) and text not in promise_backlog:
+                            promise_backlog.append(text)
+                except Exception as chapter_err:
+                    logger.warning("第%d章概要生成失败，使用占位：%s", chapter_idx, chapter_err)
+                    mission_text = _clean_mission_text(mission)
+                    fallback_payoff = expected_payoff if expected_payoff else "（无）"
                     outlines.append(
                         ChapterOutline(
-                            chapter_index=i,
-                            title=f"第{i}章",
-                            purpose=f"推进第{i}章主线职责",
-                            core_plot=f"第{i}章核心剧情待补充。",
+                            chapter_index=chapter_idx,
+                            title=f"第{chapter_idx}章",
+                            purpose=mission_text,
+                            core_plot=f"第{chapter_idx}章核心剧情待补充。",
                             irreversible_change="角色关系发生不可逆变化（待细化）",
                             character_arc_delta="角色弧线出现阶段性位移（待细化）",
-                            must_payoffs=["（无）"],
+                            must_payoffs=[fallback_payoff],
                             new_promises=["（无）"],
                         )
                     )
+                    if expected_payoff and promise_backlog:
+                        promise_backlog.pop(0)
 
-            logger.info("全书概要生成完成: %d 章", len(outlines))
+            logger.info("全书概要生成完成(逐章模式): %d 章", len(outlines))
             return {
                 "chapter_outlines": outlines,
                 "outline_approved": False,
